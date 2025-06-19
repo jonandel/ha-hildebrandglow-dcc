@@ -124,7 +124,7 @@ def supply_type(resource) -> str:
         return "electricity"
     if "gas.consumption" in resource.classifier:
         return "gas"
-        _LOGGER.error("Unknown classifier: %s. Please open an issue", resource.classifier)
+    _LOGGER.error("Unknown classifier: %s. Please open an issue", resource.classifier)
     return "unknown"
 
 
@@ -140,9 +140,9 @@ def device_name(resource, virtual_entity) -> str:
 
 
 async def should_update() -> bool:
-    """Check if time is between 1-5 or 30-35 minutes past the hour."""
-    minutes = datetime.now().minute
-    if (1 <= minutes <= 5) or (30 <= minutes <= 35):
+    """Check if time is between 0-5 or 30-35 minutes past the hour."""
+    minutes = datetime.now(tz).minute
+    if (0 <= minutes <= 5) or (30 <= minutes <= 35):
         return True
     return False
 
@@ -151,16 +151,25 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
     """Get daily usage from the API."""
     # If it's before 01:06, we need to fetch yesterday's data
     # Should only need to be before 00:36 but gas data can be 30 minutes behind electricity data
-    if datetime.now(tz).time() <= time(1, 5):
-        _LOGGER.debug("Fetching yesterday's data")
-        now = datetime.now(tz) - timedelta(days=1)
-    else:
-        now = datetime.now(tz)
+    #if datetime.now(tz).time() <= time(1, 5):
+    #    _LOGGER.debug("Fetching yesterday's data")
+    #    now = datetime.now(tz) - timedelta(days=1)
+    #else:
+    #    now = datetime.now(tz)
+    # Use Jons idea to ask for sum for entire day each time.
+    #todaystart = datetime.combine(datetime.today(), time.min)
+    #endoftoday = todaystart + timedelta(hours=23) + timedelta(minutes=59)
     # Round to the day to set time to 00:00:00
-    t_from = await hass.async_add_executor_job(resource.round, now, "P1D")
+    #t_from = await hass.async_add_executor_job(resource.round, todaystart, "P1D")
     # Round to the minute
-    t_to = await hass.async_add_executor_job(resource.round, now, "PT1M")
-    _LOGGER.debug("To %s and From %s", t_to, t_from)
+    #t_to = await hass.async_add_executor_job(resource.round, endoftoday, "PT1M")
+    #_LOGGER.debug("To %s and From %s", t_to, t_from)
+    #if datetime.now(tz).time() <= time(1, 5):
+    _LOGGER.debug("Fetching yesterday's data")
+    now = datetime.now(tz) - timedelta(days=1)
+    #else:
+    #    #Note: use non-TZ aware time specifically.
+    #    now = datetime.now()
 
     # Tell Hildebrand to pull latest DCC data
     try:
@@ -176,27 +185,32 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
     # Can't use the RuntimeError exception from the library as it's not a subclass of Exception
     except Exception as ex:  # pylint: disable=broad-except
         if "Request failed" in str(ex):
-            _LOGGER.warning(
-                "Non-200 Status Code. The Glow API may be experiencing issues"
-            )
+            _LOGGER.warning("Non-200 Status Code. The Glow API may be experiencing issues")
         else:
             _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
 
+    # Round to the day to set time to 00:00:00
+    t_from = await hass.async_add_executor_job(resource.round, now, "P1D")
+    # Round the real 'now' to the minute
+    t_to = await hass.async_add_executor_job(resource.round, datetime.now(tz), "PT1M")
+    #_LOGGER.debug("To %s and From %s", t_to, t_from)
+
     try:
-        _LOGGER.debug("Get readings from %s to %s for %s", t_from, t_to, resource.classifier)
+        _LOGGER.debug("Get readings from %s to %s for %s when now= %s", t_from, t_to, resource.classifier, now)
         readings = await hass.async_add_executor_job(
             resource.get_readings, t_from, t_to, "P1D", "sum", True
         )
         _LOGGER.debug("Successfully got daily usage for resource id %s", resource.id)
-        # Using the new logic above, there should only ever be one reading (not two, where the days > 1 based upon times), but there is, and there are also time there are zero returns (just after midnight)
+        #Remember, HA expects the consumption sensors to be accumulating, so we need yesterdays data, added to todays (so far)...
         _LOGGER.debug("Readings for %s has %s entries", resource.classifier, len(readings))
         if len(readings) == 0:
             v = 0
+            _LOGGER.debug("setting sensor value to zero")
         else:
             v = readings[0][1].value
-        _LOGGER.debug("%s reading 0,1 value %s", resource.classifier, v)
+            _LOGGER.debug("%s First reading %s at %s", resource.classifier, readings[0][0], readings[0][1].value)
         if len(readings) > 1:
-            _LOGGER.debug("%s reading 1,1 value %s", resource.classifier, readings[1][1].value)
+            _LOGGER.debug("%s Second reading %s at %s", resource.classifier, readings[1][0], readings[1][1].value )
             v +=  readings[1][1].value
         return v
     except requests.Timeout as ex:
