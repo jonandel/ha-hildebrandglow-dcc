@@ -1,14 +1,13 @@
 """Platform for sensor integration."""
+
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from datetime import datetime, time, timedelta
 import logging
-from abc import ABC, abstractmethod
 
 import requests
-
-from homeassistant.util import dt as dt_util
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -24,6 +23,7 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
 )
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 
@@ -31,6 +31,7 @@ _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(minutes=15)
 
 # --- COORDINATOR CLASSES ---
+
 
 class DataCoordinator(DataUpdateCoordinator):
     """Data update coordinator for daily usage and cost sensors."""
@@ -47,11 +48,15 @@ class DataCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self):
         """Fetch data from daily usage API endpoint."""
-        _LOGGER.debug("DataCoordinator updating for resource %s", self.resource.classifier)
+        _LOGGER.debug(
+            "DataCoordinator updating for resource %s", self.resource.classifier
+        )
         try:
             value = await daily_data(self.hass, self.resource)
             if value is None:
-                raise UpdateFailed(f"No daily data received for {self.resource.classifier}")
+                raise UpdateFailed(
+                    f"No daily data received for {self.resource.classifier}"
+                )
             return value
         except requests.Timeout as ex:
             raise UpdateFailed(f"Timeout fetching daily data: {ex}") from ex
@@ -61,7 +66,8 @@ class DataCoordinator(DataUpdateCoordinator):
             if "Request failed" in str(ex):
                 _LOGGER.warning(
                     "Non-200 Status Code fetching daily data. The Glow API may be experiencing issues for %s: %s",
-                    self.resource.classifier, ex
+                    self.resource.classifier,
+                    ex,
                 )
             else:
                 _LOGGER.exception("Unexpected exception fetching daily data: %s", ex)
@@ -76,27 +82,38 @@ class TariffCoordinator(DataUpdateCoordinator):
         super().__init__(
             hass,
             _LOGGER,
-            name=f"Tariff Data {resource.classifier}", # More specific name for logging
-            update_interval=timedelta(minutes=60), # Or your desired tariff update interval
+            name=f"Tariff Data {resource.classifier}",  # More specific name for logging
+            update_interval=timedelta(
+                minutes=60
+            ),  # Or your desired tariff update interval
         )
         self.resource = resource
 
     async def _async_update_data(self):
         """Fetch data from tariff API endpoint."""
-        _LOGGER.debug("TariffCoordinator updating for resource %s", self.resource.classifier)
+        _LOGGER.debug(
+            "TariffCoordinator updating for resource %s", self.resource.classifier
+        )
         try:
             tariff = await tariff_data(self.hass, self.resource)
             if tariff is None:
                 # If tariff_data returns None, it means no data was successfully fetched.
                 # Raise UpdateFailed to mark coordinator unavailable and propagate to sensors.
-                raise UpdateFailed(f"No tariff data received for {self.resource.classifier}")
+                raise UpdateFailed(
+                    f"No tariff data received for {self.resource.classifier}"
+                )
             return tariff
-        except Exception as ex: # Catch any exceptions that might have been re-raised or not caught by tariff_data
-            _LOGGER.exception("Error fetching tariff data for %s: %s", self.resource.classifier, ex)
+        except (
+            Exception
+        ) as ex:  # Catch any exceptions that might have been re-raised or not caught by tariff_data
+            _LOGGER.exception(
+                "Error fetching tariff data for %s: %s", self.resource.classifier, ex
+            )
             raise UpdateFailed(f"Failed to fetch tariff data: {ex}") from ex
 
 
 # --- HELPER FUNCTIONS ---
+
 
 def supply_type(resource) -> str:
     """Return supply type."""
@@ -137,37 +154,57 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
         _LOGGER.error("Cannot connect: %s", ex)
     except Exception as ex:  # pylint: disable=broad-except
         if "Request failed" in str(ex):
-            _LOGGER.warning("Non-200 Status Code. The Glow API may be experiencing issues")
+            _LOGGER.warning(
+                "Non-200 Status Code. The Glow API may be experiencing issues"
+            )
         else:
             _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
     # Round to the day to set time to 00:00:00 using dt_util.start_of_local_day
     # NOTE: Re-evaluate this logic for TOTAL_INCREASING if the API provides absolute cumulative values.
     # The current logic sums daily values, which might not be suitable for TOTAL_INCREASING.
     # TOTAL_INCREASING expects a monotonically increasing total.
-    t_from = await hass.async_add_executor_job(resource.round, now , "P1D")
+    t_from = await hass.async_add_executor_job(resource.round, now, "P1D")
     # Round the real 'now' to the minute using dt_util.now()
     t_to = await hass.async_add_executor_job(resource.round, now, "PT1M")
     # define the number of minutes to request the data offset, as described in the API for data
-    #Note: offset is how many minutes behind UTC we are.
+    # Note: offset is how many minutes behind UTC we are.
     utc_offset = -int(dt_util.now().utcoffset().total_seconds() / 60)
     _LOGGER.debug("UTC offset is: %s", utc_offset)
 
     try:
-        _LOGGER.debug("Get readings from %s to %s for %s when now= %s", t_from, t_to, resource.classifier, now)
+        _LOGGER.debug(
+            "Get readings from %s to %s for %s when now= %s",
+            t_from,
+            t_to,
+            resource.classifier,
+            now,
+        )
         readings = await hass.async_add_executor_job(
             resource.get_readings, t_from, t_to, "P1D", "sum", utc_offset
         )
         _LOGGER.debug("Successfully got daily usage for resource id %s", resource.id)
-        _LOGGER.debug("Readings for %s has %s entries", resource.classifier, len(readings))
+        _LOGGER.debug(
+            "Readings for %s has %s entries", resource.classifier, len(readings)
+        )
         if len(readings) == 0:
             v = 0
             _LOGGER.debug("setting sensor value to zero")
         else:
             v = readings[0][1].value
-            _LOGGER.debug("%s First reading %s at %s", resource.classifier, readings[0][0], readings[0][1].value)
+            _LOGGER.debug(
+                "%s First reading %s at %s",
+                resource.classifier,
+                readings[0][0],
+                readings[0][1].value,
+            )
         if len(readings) > 1:
-            _LOGGER.debug("%s Second reading %s at %s", resource.classifier, readings[1][0], readings[1][1].value )
-            v +=  readings[1][1].value
+            _LOGGER.debug(
+                "%s Second reading %s at %s",
+                resource.classifier,
+                readings[1][0],
+                readings[1][1].value,
+            )
+            v += readings[1][1].value
         return v
     except requests.Timeout as ex:
         _LOGGER.error("Timeout: %s", ex)
@@ -182,7 +219,10 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
             _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
     return None
 
-async def tariff_data(hass: HomeAssistant, resource): # Removed -> float hint; it returns an object
+
+async def tariff_data(
+    hass: HomeAssistant, resource
+):  # Removed -> float hint; it returns an object
     """Get tariff data from the API."""
     try:
         tariff = await hass.async_add_executor_job(resource.get_tariff)
@@ -200,29 +240,42 @@ async def tariff_data(hass: HomeAssistant, resource): # Removed -> float hint; i
             supply,
             resource.id,
         )
-        return None # Explicitly return None on this specific condition
+        return None  # Explicitly return None on this specific condition
     except requests.Timeout as ex:
-        _LOGGER.error("Timeout fetching tariff data for %s: %s", resource.classifier, ex)
-        return None # Let coordinator handle UpdateFailed
+        _LOGGER.error(
+            "Timeout fetching tariff data for %s: %s", resource.classifier, ex
+        )
+        return None  # Let coordinator handle UpdateFailed
     except requests.exceptions.ConnectionError as ex:
-        _LOGGER.error("Connection error fetching tariff data for %s: %s", resource.classifier, ex)
-        return None # Let coordinator handle UpdateFailed
+        _LOGGER.error(
+            "Connection error fetching tariff data for %s: %s", resource.classifier, ex
+        )
+        return None  # Let coordinator handle UpdateFailed
     except Exception as ex:  # pylint: disable=broad-except
         if "Request failed" in str(ex):
             _LOGGER.warning(
-                "Non-200 Status Code. The Glow API may be experiencing issues for tariff %s: %s", resource.classifier, ex
+                "Non-200 Status Code. The Glow API may be experiencing issues for tariff %s: %s",
+                resource.classifier,
+                ex,
             )
         else:
-            _LOGGER.exception("Unexpected exception fetching tariff data for %s: %s. Please open an issue", resource.classifier, ex)
-        return None # Let coordinator handle UpdateFailed
+            _LOGGER.exception(
+                "Unexpected exception fetching tariff data for %s: %s. Please open an issue",
+                resource.classifier,
+                ex,
+            )
+        return None  # Let coordinator handle UpdateFailed
 
 
 # --- SENSOR BASE CLASS ---
 
+
 class GlowDCCSensor(CoordinatorEntity, SensorEntity, ABC):
     """Base class for Hildebrand Glow DCC sensors."""
 
-    def __init__(self, coordinator: DataUpdateCoordinator, resource, virtual_entity) -> None:
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, resource, virtual_entity
+    ) -> None:
         super().__init__(coordinator)
         self.resource = resource
         self.virtual_entity = virtual_entity
@@ -231,7 +284,7 @@ class GlowDCCSensor(CoordinatorEntity, SensorEntity, ABC):
     def device_info(self) -> DeviceInfo:
         """Return device information."""
         identifier_resource = self.resource
-        if hasattr(self, 'meter') and self.meter is not None:
+        if hasattr(self, "meter") and self.meter is not None:
             identifier_resource = self.meter.resource
 
         return DeviceInfo(
@@ -256,6 +309,7 @@ class GlowDCCSensor(CoordinatorEntity, SensorEntity, ABC):
 
 # --- SENSOR CLASSES ---
 
+
 class Usage(GlowDCCSensor):
     """Sensor object for daily usage."""
 
@@ -265,7 +319,9 @@ class Usage(GlowDCCSensor):
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
 
-    def __init__(self, coordinator: DataUpdateCoordinator, resource, virtual_entity) -> None:
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, resource, virtual_entity
+    ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, resource, virtual_entity)
         self._attr_unique_id = f"{resource.id}_usage_today"
@@ -292,7 +348,9 @@ class Cost(GlowDCCSensor):
     _attr_native_unit_of_measurement = "GBP"
     _attr_state_class = SensorStateClass.TOTAL
 
-    def __init__(self, coordinator: DataUpdateCoordinator, resource, virtual_entity) -> None:
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, resource, virtual_entity
+    ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, resource, virtual_entity)
         self.meter = None
@@ -304,7 +362,7 @@ class Cost(GlowDCCSensor):
         self._attr_native_value = round(data / 100, 2)
 
 
-class Standing(CoordinatorEntity, SensorEntity): # Standing and Rate were moved up
+class Standing(CoordinatorEntity, SensorEntity):  # Standing and Rate were moved up
     """An entity using CoordinatorEntity.
     The CoordinatorEntity class provides:
       should_poll
@@ -319,7 +377,9 @@ class Standing(CoordinatorEntity, SensorEntity): # Standing and Rate were moved 
     _attr_native_unit_of_measurement = "GBP"
     _attr_entity_registry_enabled_default = False
 
-    def __init__(self, coordinator: DataUpdateCoordinator, resource, virtual_entity) -> None:
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, resource, virtual_entity
+    ) -> None:
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
 
@@ -349,7 +409,7 @@ class Standing(CoordinatorEntity, SensorEntity): # Standing and Rate were moved 
         )
 
 
-class Rate(CoordinatorEntity, SensorEntity): # Standing and Rate were moved up
+class Rate(CoordinatorEntity, SensorEntity):  # Standing and Rate were moved up
     """An entity using CoordinatorEntity.
     The CoordinatorEntity class provides:
       should_poll
@@ -365,7 +425,9 @@ class Rate(CoordinatorEntity, SensorEntity): # Standing and Rate were moved up
     _attr_native_unit_of_measurement = "GBP/kWh"
     _attr_entity_registry_enabled_default = False
 
-    def __init__(self, coordinator: DataUpdateCoordinator, resource, virtual_entity) -> None:
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, resource, virtual_entity
+    ) -> None:
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
 
@@ -394,6 +456,7 @@ class Rate(CoordinatorEntity, SensorEntity): # Standing and Rate were moved up
 
 
 # --- ASYNC SETUP ENTRY FUNCTION ---
+
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: Callable
@@ -447,10 +510,16 @@ async def async_setup_entry(
         for resource in resources:
             if resource.classifier in ["electricity.consumption", "gas.consumption"]:
                 if resource.classifier not in daily_coordinators:
-                    daily_coordinators[resource.classifier] = DataCoordinator(hass, resource)
-                    await daily_coordinators[resource.classifier].async_config_entry_first_refresh()
+                    daily_coordinators[resource.classifier] = DataCoordinator(
+                        hass, resource
+                    )
+                    await daily_coordinators[
+                        resource.classifier
+                    ].async_config_entry_first_refresh()
 
-                usage_sensor = Usage(daily_coordinators[resource.classifier], resource, virtual_entity)
+                usage_sensor = Usage(
+                    daily_coordinators[resource.classifier], resource, virtual_entity
+                )
                 entities.append(usage_sensor)
                 meters[resource.classifier] = usage_sensor
 
@@ -465,18 +534,30 @@ async def async_setup_entry(
         for resource in resources:
             if resource.classifier == "gas.consumption.cost":
                 if resource.classifier not in daily_coordinators:
-                    daily_coordinators[resource.classifier] = DataCoordinator(hass, resource)
-                    await daily_coordinators[resource.classifier].async_config_entry_first_refresh()
+                    daily_coordinators[resource.classifier] = DataCoordinator(
+                        hass, resource
+                    )
+                    await daily_coordinators[
+                        resource.classifier
+                    ].async_config_entry_first_refresh()
 
-                cost_sensor = Cost(daily_coordinators[resource.classifier], resource, virtual_entity)
+                cost_sensor = Cost(
+                    daily_coordinators[resource.classifier], resource, virtual_entity
+                )
                 cost_sensor.meter = meters["gas.consumption"]
                 entities.append(cost_sensor)
             elif resource.classifier == "electricity.consumption.cost":
                 if resource.classifier not in daily_coordinators:
-                    daily_coordinators[resource.classifier] = DataCoordinator(hass, resource)
-                    await daily_coordinators[resource.classifier].async_config_entry_first_refresh()
+                    daily_coordinators[resource.classifier] = DataCoordinator(
+                        hass, resource
+                    )
+                    await daily_coordinators[
+                        resource.classifier
+                    ].async_config_entry_first_refresh()
 
-                cost_sensor = Cost(daily_coordinators[resource.classifier], resource, virtual_entity)
+                cost_sensor = Cost(
+                    daily_coordinators[resource.classifier], resource, virtual_entity
+                )
                 cost_sensor.meter = meters["electricity.consumption"]
                 entities.append(cost_sensor)
 
