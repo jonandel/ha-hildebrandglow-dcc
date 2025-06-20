@@ -1,4 +1,4 @@
-Copyright (c) 2019 Harley Watson
+Copyright (c) 2025 Jon Bartlett - but note many others have contributed to this multiple forked solun
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
