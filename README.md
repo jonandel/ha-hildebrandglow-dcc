@@ -3,7 +3,7 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg?style=for-the-badge)](https://github.com/custom-components/hacs)
 [![CodeFactor Grade](https://img.shields.io/codefactor/grade/github/JonandEl/ha-hildebrandglow-dcc?style=for-the-badge)](https://www.codefactor.io/repository/github/jonandel/ha-hildebrandglow-dcc)
 [![DeepSource](https://deepsource.io/gh/jonandel/ha-hildebrandglow-dcc.svg/?label=active+issues&show_trend=true&token=gYN6CNb5ApHN5Pry_U-FFSYK)](https://deepsource.io/gh/JonandEl/ha-hildebrandglow-dcc/?ref=repository-badge)
-[!["Buy the original author A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/HandyHat)
+[!["Buy the author A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/jonandel)
 
 Home Assistant integration for energy consumption data from UK SMETS (Smart) meters using the Hildebrand Glow API.
 The original from (HandyHat) of this project is now declared as abandoned, so after the local tweaks Ive been making over the last 24 months, and into the future, I decided to create my own fork.
