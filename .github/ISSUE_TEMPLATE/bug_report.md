@@ -23,6 +23,7 @@ A clear and concise description of what you expected to happen.
 
 **Screenshots**
 If applicable, add screenshots to help explain your problem.
+Particularly if you are using gas and electricity monitoring.
 
 **Version**
 What version of the integration and what version of Home Assistant are you running?
