@@ -14,7 +14,7 @@ The original from (HandyHat) of this project is now declared as abandoned, so af
 
 You can install this component through [HACS](https://hacs.xyz/) to easily receive updates. Once HACS is installed, click this link:
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Jonandel&repository=ha-hildebrandglow-dcc)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jonandel&repository=ha-hildebrandglow-dcc)
 
 <details>
   <summary>Manually add to HACS</summary>
