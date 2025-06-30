@@ -50,7 +50,7 @@ Once you've authenticated, the integration will automatically set up the followi
 - Standing Charge - Current standing charge (GBP)
 - Rate - Current tariff (GBP/kWh)
 
-The usage and cost sensors will still show the previous day's data until shortly after 01:30 to ensure that all of the previous day's data is collected.
+The usage and cost sensors will still show the previous day's data until shortly after 01:00 to ensure that all of the previous day's data is collected.
 
 The standing charge and rate sensors are disabled by default as they are less commonly used. Before enabling them, ensure the data is visible in the Bright app.
 
@@ -60,6 +60,7 @@ If the data being shown is wrong, check the Bright app first. If it is also wron
 
 The sensors created integrate directly into Home Assistant's [Home Energy Management](https://www.home-assistant.io/docs/energy/).
 It is recommended you use the daily usage and cost sensors in the Energy integration.
+However, be aware that due to the lower refresh rate of this Integration, you will need to wait until the sensors have data, before you can add/edit them into the Energy dashboard (they will have an indepterminate state before that) - so wait an hour or two.
 
 [![Open your Home Assistant instance and show your Energy configuration panel.](https://my.home-assistant.io/badges/config_energy.svg)](https://my.home-assistant.io/redirect/config_energy/)
 
