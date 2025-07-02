@@ -2,7 +2,7 @@
   "domain": "hildebrandglow_dcc",
   "name": "Hildebrand Glow (DCC)",
   "codeowners": [
-    "@HandyHat"
+    "@JonandEl"
   ],
   "config_flow": true,
   "documentation": "https://github.com/jonandel/ha-hildebrandglow-dcc",
