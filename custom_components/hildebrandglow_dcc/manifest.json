@@ -5,12 +5,12 @@
     "@HandyHat"
   ],
   "config_flow": true,
-  "documentation": "https://github.com/HandyHat/ha-hildebrandglow-dcc",
+  "documentation": "https://github.com/jonandel/ha-hildebrandglow-dcc",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/HandyHat/ha-hildebrandglow-dcc/issues",
+  "issue_tracker": "https://github.com/jonandel/ha-hildebrandglow-dcc/issues",
   "requirements": [
     "pyglowmarkt==0.5.5"
   ],
-  "version": "1.1.0"
+  "version": "1.0.1-beta"
 }
