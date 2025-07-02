@@ -59,9 +59,10 @@ If the data being shown is wrong, check the Bright app first. If it is also wron
 
 ## Energy Management
 
-The sensors created integrate directly into Home Assistant's [Home Energy Management](https://www.home-assistant.io/docs/energy/).
-It is recommended you use the daily usage and cost sensors in the Energy integration.
-However, be aware that due to the lower refresh rate of this Integration, you will need to wait until the sensors have data, before you can add/edit them into the Energy dashboard (they will have an indepterminate state before that) - so wait an hour or two.
+The sensors created were originally designed to integrate directly into Home Assistant's [Home Energy Management](https://www.home-assistant.io/docs/energy/).  However, with HA since (roughly 2024), the energy dashboard does not handle the daily resetting of the sensors.  
+It is NOT recommended you use the daily usage and cost sensors in the Energy integration, and consider using the Utility Meter Integration (built into HA), and define you own total usage and Cost sensors.  A later release of this integration will update on suggestions on what and how to do this - but it is currently believed to be NOT something this integration can resolve directly.
+
+Be aware also that due to the lower refresh rate of this Integration, you will need to wait until the sensors have data - so wait an hour or two.
 
 [![Open your Home Assistant instance and show your Energy configuration panel.](https://my.home-assistant.io/badges/config_energy.svg)](https://my.home-assistant.io/redirect/config_energy/)
 
