@@ -6,7 +6,8 @@
 [!["Buy the author A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/jonandel)
 
 Home Assistant integration for energy consumption data from UK SMETS (Smart) meters using the Hildebrand Glow API.
-The original from (HandyHat) of this project is now declared as abandoned, so after the local tweaks Ive been making over the last 24 months, and into the future, I decided to create my own fork.
+The original from (HandyHat) of this project is now declared as abandoned, so after the local tweaks Ive been making over the last 24 months, and into the future, I decided to create my own fork, and release it.
+The idea is that this new Repo will be a place where the community of users can contribute, and collectively we can improve this Integration.
 
 ## Installation
 
