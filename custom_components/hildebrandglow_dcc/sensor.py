@@ -161,10 +161,10 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
         else:
             _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
     # Round to the day to set time to 00:00:00 using the executor job.
-    #t_from = await hass.async_add_executor_job(resource.round, now, "P1D")
+    # t_from = await hass.async_add_executor_job(resource.round, now, "P1D")
     t_from = now.replace(hour=0, minute=0, second=0, microsecond=0)
     # Round the now (in UTC) to the minute
-    #t_to = await hass.async_add_executor_job(resource.round, now, "PT1M")
+    # t_to = await hass.async_add_executor_job(resource.round, now, "PT1M")
     t_to = now.replace(second=0, microsecond=0)
     # define the number of minutes to request the data offset, as described in the API for data, to account for differences to UTC
     # Note: offset is how many minutes behind UTC we are.
@@ -187,7 +187,7 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
             "Readings for %s has %s entries", resource.classifier, len(readings)
         )
         if len(readings) == 0:
-            #v = 0  Dont set return value.
+            # v = 0  Dont set return value.
             _LOGGER.debug("nothing returned")
         else:
             v = readings[0][1].value
