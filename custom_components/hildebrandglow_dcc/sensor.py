@@ -139,6 +139,7 @@ def device_name(resource, virtual_entity) -> str:
 async def daily_data(hass: HomeAssistant, resource) -> float:
     """Get Summ for the day from the API."""
     _LOGGER.debug("Fetching today's data")
+    # Get the current time in UTC (as thats what HA and the API use)
     now = dt_util.utcnow()
 
     # Tell Hildebrand to pull latest DCC data
@@ -159,14 +160,11 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
             )
         else:
             _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
-    # Round to the day to set time to 00:00:00 using dt_util.start_of_local_day
-    # NOTE: Re-evaluate this logic for TOTAL_INCREASING if the API provides absolute cumulative values.
-    # The current logic sums daily values, which might not be suitable for TOTAL_INCREASING.
-    # TOTAL_INCREASING expects a monotonically increasing total.
+    # Round to the day to set time to 00:00:00 using the executor job.
     t_from = await hass.async_add_executor_job(resource.round, now, "P1D")
-    # Round the real 'now' to the minute using dt_util.now()
+    # Round the now (in UTC) to the minute
     t_to = await hass.async_add_executor_job(resource.round, now, "PT1M")
-    # define the number of minutes to request the data offset, as described in the API for data
+    # define the number of minutes to request the data offset, as described in the API for data, to account for differences to UTC
     # Note: offset is how many minutes behind UTC we are.
     utc_offset = -int(dt_util.now().utcoffset().total_seconds() / 60)
     _LOGGER.debug("UTC offset is: %s", utc_offset)
