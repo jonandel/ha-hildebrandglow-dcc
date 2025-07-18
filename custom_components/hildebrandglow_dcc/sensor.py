@@ -28,7 +28,7 @@ from homeassistant.util import dt as dt_util
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-SCAN_INTERVAL = timedelta(minutes=10)
+SCAN_INTERVAL = timedelta(minutes=15)
 
 # --- COORDINATOR CLASSES ---
 
@@ -141,6 +141,10 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
     _LOGGER.debug("Fetching today's data")
     # Get the current time in UTC (as thats what HA and the API use)
     now = dt_util.utcnow()
+    # Note: offset is how many minutes behind UTC we are.
+    # define the number of minutes to request the data offset, as described in the API for data, to account for differences to UTC
+    utc_offset = -int(dt_util.now().utcoffset().total_seconds() / 60)
+    _LOGGER.debug("UTC offset is: %s", utc_offset)
 
     # Tell Hildebrand to pull latest DCC data
     try:
@@ -156,20 +160,15 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
     except Exception as ex:  # pylint: disable=broad-except
         if "Request failed" in str(ex):
             _LOGGER.warning(
-                "Non-200 Status Code. The Glow API may be experiencing issues"
+                "Non-200 Status Code. The Glow API may be experiencing issues."
             )
         else:
             _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
-    # Round to the day to set time to 00:00:00 using the executor job.
-    # t_from = await hass.async_add_executor_job(resource.round, now, "P1D")
-    t_from = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    # Round to the day to set time to 00:00:00, but taking off the UTC offset if there is one.
+    #Use this strategy, to get the last hour(s) before midnight as well, as our day starts utc_offset from UTC
+    t_from = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(minutes=utc_offset)
     # Round the now (in UTC) to the minute
-    # t_to = await hass.async_add_executor_job(resource.round, now, "PT1M")
     t_to = now.replace(second=0, microsecond=0)
-    # define the number of minutes to request the data offset, as described in the API for data, to account for differences to UTC
-    # Note: offset is how many minutes behind UTC we are.
-    utc_offset = -int(dt_util.now().utcoffset().total_seconds() / 60)
-    _LOGGER.debug("UTC offset is: %s", utc_offset)
 
     try:
         _LOGGER.debug(
@@ -186,8 +185,8 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
         _LOGGER.debug(
             "Readings for %s has %s entries", resource.classifier, len(readings)
         )
-        if len(readings) == 0:
-            # v = 0  Dont set return value.
+        if not readings:   #Check if we get no return values
+            v = 0  # Return zero value.
             _LOGGER.debug("nothing returned")
         else:
             v = readings[0][1].value
@@ -198,13 +197,13 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
                 readings[0][1].value,
             )
         if len(readings) > 1:
+            v += readings[1][1].value
             _LOGGER.debug(
                 "%s Second reading %s at %s",
                 resource.classifier,
                 readings[1][0],
                 readings[1][1].value,
             )
-            v += readings[1][1].value
         return v
     except requests.Timeout as ex:
         _LOGGER.error("Timeout: %s", ex)
