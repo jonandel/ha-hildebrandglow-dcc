@@ -165,7 +165,7 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
         else:
             _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
     # Round to the day to set time to 00:00:00, but taking off the UTC offset if there is one.
-    #Use this strategy, to get the last hour(s) before midnight as well, as our day starts utc_offset from UTC
+    # Use this strategy, to get the last hour(s) before midnight as well, as our day starts utc_offset from UTC
     t_from = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(minutes=utc_offset)
     # Round the now (in UTC) to the minute
     t_to = now.replace(second=0, microsecond=0)
@@ -185,8 +185,7 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
         _LOGGER.debug(
             "Readings for %s has %s entries", resource.classifier, len(readings)
         )
-        if not readings:   #Check if we get no return values
-            v = 0  # Return zero value.
+        if not readings:   #Check if we get zero return values
             _LOGGER.debug("nothing returned")
         else:
             v = readings[0][1].value
@@ -196,15 +195,16 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
                 readings[0][0],
                 readings[0][1].value,
             )
-        if len(readings) > 1:
-            v += readings[1][1].value
-            _LOGGER.debug(
-                "%s Second reading %s at %s",
-                resource.classifier,
-                readings[1][0],
-                readings[1][1].value,
-            )
-        return v
+            if len(readings) > 1:
+                v += readings[1][1].value
+                _LOGGER.debug(
+                    "%s Second reading %s at %s",
+                    resource.classifier,
+                    readings[1][0],
+                    readings[1][1].value,
+                )
+            # only return a value, if one or more values came back from the API.
+            return v
     except requests.Timeout as ex:
         _LOGGER.error("Timeout: %s", ex)
     except requests.exceptions.ConnectionError as ex:
