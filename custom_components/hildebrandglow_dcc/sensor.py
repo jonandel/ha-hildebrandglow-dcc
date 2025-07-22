@@ -166,7 +166,9 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
             _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
     # Round to the day to set time to 00:00:00, but taking off the UTC offset if there is one.
     # Use this strategy, to get the last hour(s) before midnight as well, as our day starts utc_offset from UTC
-    t_from = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(minutes=utc_offset)
+    t_from = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(
+        minutes=utc_offset
+    )
     # Round the now (in UTC) to the minute
     t_to = now.replace(second=0, microsecond=0)
 
@@ -185,7 +187,7 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
         _LOGGER.debug(
             "Readings for %s has %s entries", resource.classifier, len(readings)
         )
-        if not readings:   #Check if we get zero return values
+        if not readings:  # Check if we get zero return values
             _LOGGER.debug("nothing returned")
         else:
             v = readings[0][1].value
