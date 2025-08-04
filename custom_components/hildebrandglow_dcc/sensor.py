@@ -29,6 +29,7 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(minutes=15)
+TARIFF_SCAN_INTERVAL = timedelta(minutes=60)
 
 # --- COORDINATOR CLASSES ---
 
@@ -83,9 +84,7 @@ class TariffCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             name=f"Tariff Data {resource.classifier}",  # More specific name for logging
-            update_interval=timedelta(
-                minutes=60
-            ),  # Or your desired tariff update interval
+            update_interval=TARIFF_SCAN_INTERVAL,
         )
         self.resource = resource
 
