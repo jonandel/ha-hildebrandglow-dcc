@@ -386,7 +386,9 @@ class Standing(CoordinatorEntity, SensorEntity):  # Standing and Rate were moved
         super().__init__(coordinator)
 
         self._attr_unique_id = f"{resource.id}_standing_charge"
-        _LOGGER.debug("Created Standing sensor with unique_id: %s", self._attr_unique_id)
+        _LOGGER.debug(
+            "Created Standing sensor with unique_id: %s", self._attr_unique_id
+        )
 
         self.resource = resource
         self.virtual_entity = virtual_entity
@@ -496,7 +498,9 @@ async def async_setup_entry(
         _LOGGER.debug("Found virtual entity: %s", virtual_entity.name)
         resources: dict = {}
         try:
-            _LOGGER.debug("Fetching resources for virtual entity %s...", virtual_entity.name)
+            _LOGGER.debug(
+                "Fetching resources for virtual entity %s...", virtual_entity.name
+            )
             resources = await hass.async_add_executor_job(virtual_entity.get_resources)
             _LOGGER.debug(
                 "Successful GET to %svirtualentity/%s/resources",
@@ -516,7 +520,9 @@ async def async_setup_entry(
                 _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
 
         for resource in resources:
-            _LOGGER.debug("Processing resource with classifier: %s", resource.classifier)
+            _LOGGER.debug(
+                "Processing resource with classifier: %s", resource.classifier
+            )
             if resource.classifier in ["electricity.consumption", "gas.consumption"]:
                 if resource.classifier not in daily_coordinators:
                     daily_coordinators[resource.classifier] = DataCoordinator(
@@ -531,20 +537,24 @@ async def async_setup_entry(
                 )
                 entities.append(usage_sensor)
                 meters[resource.classifier] = usage_sensor
-                _LOGGER.debug("Added Usage sensor to list for entity %s", resource.classifier)
-
+                _LOGGER.debug(
+                    "Added Usage sensor to list for entity %s", resource.classifier
+                )
 
                 coordinator = TariffCoordinator(hass, resource)
                 coordinator.async_config_entry_first_refresh()
 
                 standing_sensor = Standing(coordinator, resource, virtual_entity)
                 entities.append(standing_sensor)
-                _LOGGER.debug("Added Standing sensor to list for entity %s", resource.classifier)
+                _LOGGER.debug(
+                    "Added Standing sensor to list for entity %s", resource.classifier
+                )
 
                 rate_sensor = Rate(coordinator, resource, virtual_entity)
                 entities.append(rate_sensor)
-                _LOGGER.debug("Added Rate sensor to list for entity %s", resource.classifier)
-
+                _LOGGER.debug(
+                    "Added Rate sensor to list for entity %s", resource.classifier
+                )
 
         for resource in resources:
             if resource.classifier == "gas.consumption.cost":
