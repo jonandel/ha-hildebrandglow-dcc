@@ -9,9 +9,12 @@ Home Assistant integration for energy consumption data from UK SMETS (Smart) met
 The original from (HandyHat) of this project is now declared as abandoned, so after the local tweaks Ive been making over the last 24 months, and into the future, I decided to create my own fork, and release it.
 The idea is that this new Repo will be a place where the community of users can contribute, and collectively we can improve this Integration.
 
-## Installation
-
 Note: if you want to see bebugging information as the integration is setup, then you need to configure the logger (for debug) as defined below, BEFORE, you 'Add Integration'.
+Please Note: in this version of the Integration, the devices and sensors are defined once the integration is setup (the part where you have added the integration, and then entered your Glow username and Password).  
+The sensors will appear as 'unavailable' for a little while, whilst the Glow API is polled for your data - this can take up to 30 minutes for the meter readings (your usage); and up to 2 hours for the rate and tarrif inforation, once you have enabled them.
+
+
+## Installation
 
 ### Automated installation through HACS
 
