@@ -11,7 +11,7 @@ The idea is that this new Repo will be a place where the community of users can 
 
 Note: in order to create debugging information as the integration is setup, then you need to configure the logger (for debug) as defined below - ie BEFORE, you 'Add Integration'.
 Please Note: in this version of the Integration, the devices and sensors are defined once the integration is setup (the part where you have added the integration, and then entered your Glow username and Password).  
-The sensors will appear as 'unavailable' for a little while, whilst the Glow API is polled for your data - this can take up to 30 minutes for the meter readings (your usage); and up to 2 hours for the rate and tarrif inforation, once you have enabled them.
+The sensors will immediately appear as 'unavailable' whilst the Glow API is polled for your data - this can take up to 30 minutes for the meter readings (your usage); and up to 2 hours for the rate and tarrif information, once you have enabled them.
 
 
 ## Installation
