@@ -11,6 +11,8 @@ The idea is that this new Repo will be a place where the community of users can 
 
 ## Installation
 
+Note: if you want to see bebugging information as the integration is setup, then you need to configure the logger (for debug) as defined below, BEFORE, you 'Add Integration'.
+
 ### Automated installation through HACS
 
 You can install this component through [HACS](https://hacs.xyz/) to easily receive updates. Once HACS is installed, click this link:
@@ -68,7 +70,7 @@ Be aware also that due to the lower refresh rate of this Integration, you will n
 
 ## Debugging
 
-To debug the integration, add the following to your `configuration.yaml`
+To debug the integration, add the following to your `configuration.yaml`, and if you want to see the debug information as the Integration is setup, you will need to add this BEFORE clicking 'add integration'.
 
 ```yaml
 logger:
