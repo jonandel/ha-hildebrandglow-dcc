@@ -16,6 +16,8 @@ The sensors will immediately appear as 'unavailable' whilst the Glow API is poll
 
 ## Installation
 
+Note: if you had the previous Integration (by HandyHat, and now abandoned) installed, it is strongly advised to remove it, and ensure you perform a full Home Assistant reboot before installing this.
+
 ### Automated installation through HACS
 
 You can install this component through [HACS](https://hacs.xyz/) to easily receive updates. Once HACS is installed, click this link:
