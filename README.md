@@ -16,7 +16,7 @@ The sensors will immediately appear as 'unavailable' whilst the Glow API is poll
 
 ## Installation
 
-Note: if you had the previous Integration (by HandyHat, and now abandoned) installed, it is strongly advised to remove it, and ensure you perform a full Home Assistant reboot before installing this.
+Note: if you had the previous Integration (by HandyHat, and now abandoned) installed, it is strongly advised to remove it, and ensure you perform a full Home Assistant reboot before installing this, to avoid orphaned devices and sensors.
 
 ### Automated installation through HACS
 
