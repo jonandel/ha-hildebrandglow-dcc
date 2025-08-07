@@ -9,7 +9,14 @@ Home Assistant integration for energy consumption data from UK SMETS (Smart) met
 The original from (HandyHat) of this project is now declared as abandoned, so after the local tweaks Ive been making over the last 24 months, and into the future, I decided to create my own fork, and release it.
 The idea is that this new Repo will be a place where the community of users can contribute, and collectively we can improve this Integration.
 
+Note: in order to create debugging information as the integration is setup, then you need to configure the logger (for debug) as defined below - ie BEFORE, you 'Add Integration'.
+Please Note: in this version of the Integration, the devices and sensors are defined once the integration is setup (the part where you have added the integration, and then entered your Glow username and Password).  
+The sensors will immediately appear as 'unavailable' whilst the Glow API is polled for your data - this can take up to 30 minutes for the meter readings (your usage); and up to 2 hours for the rate and tarrif information, once you have enabled them.
+
+
 ## Installation
+
+Note: if you had the previous Integration (by HandyHat, and now abandoned) installed, it is strongly advised to remove it, and ensure you perform a full Home Assistant reboot before installing this.
 
 ### Automated installation through HACS
 
@@ -68,7 +75,7 @@ Be aware also that due to the lower refresh rate of this Integration, you will n
 
 ## Debugging
 
-To debug the integration, add the following to your `configuration.yaml`
+To debug the integration, add the following to your `configuration.yaml`, and if you want to see the debug information as the Integration is setup, you will need to add this BEFORE clicking 'add integration'.
 
 ```yaml
 logger:
