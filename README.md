@@ -83,6 +83,11 @@ logger:
   logs:
     custom_components.hildebrandglow_dcc: debug
 ```
+Please Note: This Integration uses a (recent in 2025) best practice to load the Integration, ensuring the first call to the API verifying the resources, but does not then wait for the data in the sensors to be populated.
+You will see warnings in the logs such as this (typically three, or more, depending upon what resources you have):
+       WARNING (MainThread) [py.warnings] /config/custom_components/hildebrandglow_dcc/sensor.py:533: RuntimeWarning: coroutine 'DataUpdateCoordinator.async_config_entry_first_refresh' was never awaited
+This is normal and expected behaviour (of Home Assistant, not the Integration).
+
 
 ## Development
 
