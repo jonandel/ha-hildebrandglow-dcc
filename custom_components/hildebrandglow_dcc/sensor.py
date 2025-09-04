@@ -29,8 +29,8 @@ from homeassistant.util import dt as dt_util
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-SCAN_INTERVAL = timedelta(minutes=env.get("HB_GLOW_SCAN_INTERVAL", 15))
-TARIFF_SCAN_INTERVAL = timedelta(minutes=env.get("HB_GLOW_TARIFF_SCAN_INTERVAL", 60))
+SCAN_INTERVAL = timedelta(minutes=int(env.get("HB_GLOW_SCAN_INTERVAL", "15")))
+TARIFF_SCAN_INTERVAL = timedelta(minutes=int(env.get("HB_GLOW_TARIFF_SCAN_INTERVAL", "60")))
 
 # --- COORDINATOR CLASSES ---
 
