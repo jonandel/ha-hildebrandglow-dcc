@@ -8,6 +8,7 @@ from datetime import datetime, time, timedelta
 import logging
 
 import requests
+from os import environ as env
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -28,8 +29,8 @@ from homeassistant.util import dt as dt_util
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-SCAN_INTERVAL = timedelta(minutes=15)
-TARIFF_SCAN_INTERVAL = timedelta(minutes=60)
+SCAN_INTERVAL = timedelta(minutes=env.get("HB_GLOW_SCAN_INTERVAL", 15))
+TARIFF_SCAN_INTERVAL = timedelta(minutes=env.get("HB_GLOW_TARIFF_SCAN_INTERVAL", 60))
 
 # --- COORDINATOR CLASSES ---
 
