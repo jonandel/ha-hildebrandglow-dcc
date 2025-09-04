@@ -8,7 +8,6 @@ from datetime import datetime, time, timedelta
 import logging
 
 import requests
-from os import environ as env
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -29,8 +28,8 @@ from homeassistant.util import dt as dt_util
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-SCAN_INTERVAL = timedelta(minutes=int(env.get("HB_GLOW_SCAN_INTERVAL", "15")))
-TARIFF_SCAN_INTERVAL = timedelta(minutes=int(env.get("HB_GLOW_TARIFF_SCAN_INTERVAL", "60")))
+SCAN_INTERVAL = timedelta(minutes=15)
+TARIFF_SCAN_INTERVAL = timedelta(minutes=60)
 
 # --- COORDINATOR CLASSES ---
 
@@ -543,7 +542,7 @@ async def async_setup_entry(
                 )
 
                 coordinator = TariffCoordinator(hass, resource)
-                coordinator.async_config_entry_first_refresh()
+                await coordinator.async_config_entry_first_refresh()
 
                 standing_sensor = Standing(coordinator, resource, virtual_entity)
                 entities.append(standing_sensor)
@@ -563,7 +562,7 @@ async def async_setup_entry(
                     daily_coordinators[resource.classifier] = DataCoordinator(
                         hass, resource
                     )
-                    daily_coordinators[
+                    await daily_coordinators[
                         resource.classifier
                     ].async_config_entry_first_refresh()
 
@@ -578,7 +577,7 @@ async def async_setup_entry(
                     daily_coordinators[resource.classifier] = DataCoordinator(
                         hass, resource
                     )
-                    daily_coordinators[
+                    await daily_coordinators[
                         resource.classifier
                     ].async_config_entry_first_refresh()
 
