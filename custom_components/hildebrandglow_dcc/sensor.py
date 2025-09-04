@@ -529,7 +529,7 @@ async def async_setup_entry(
                     daily_coordinators[resource.classifier] = DataCoordinator(
                         hass, resource
                     )
-                    daily_coordinators[
+                    await daily_coordinators[
                         resource.classifier
                     ].async_config_entry_first_refresh()
 
