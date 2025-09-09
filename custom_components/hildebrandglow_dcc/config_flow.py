@@ -13,7 +13,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,6 +21,12 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required("username"): str,
         vol.Required("password"): str,
+        vol.Optional(CONF_DAILY_INTERVAL, default=15): vol.All(
+            vol.Coerce(int), vol.Range(min=1)
+        ),
+        vol.Optional(CONF_TARIFF_INTERVAL, default=60): vol.All(
+            vol.Coerce(int), vol.Range(min=1)
+        ),
     }
 )
 
