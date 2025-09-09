@@ -25,11 +25,11 @@ from homeassistant.helpers.update_coordinator import (
 )
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
-SCAN_INTERVAL = timedelta(minutes=15)
-TARIFF_SCAN_INTERVAL = timedelta(minutes=60)
+# SCAN_INTERVAL = timedelta(minutes=15)
+# TARIFF_SCAN_INTERVAL = timedelta(minutes=60)
 
 # --- COORDINATOR CLASSES ---
 
@@ -37,14 +37,14 @@ TARIFF_SCAN_INTERVAL = timedelta(minutes=60)
 class DataCoordinator(DataUpdateCoordinator):
     """Data update coordinator for daily usage and cost sensors."""
 
-    def __init__(self, hass: HomeAssistant, glowmarkt_resource):
+    def __init__(self, hass: HomeAssistant, glowmarkt_resource, daily_interval):
         """Initialize daily data coordinator."""
         self.resource = glowmarkt_resource
         super().__init__(
             hass,
             _LOGGER,
             name=f"Daily Data {glowmarkt_resource.classifier}",
-            update_interval=SCAN_INTERVAL,
+            update_interval=timedelta(minutes=daily_interval),
         )
 
     async def _async_update_data(self):
@@ -78,13 +78,13 @@ class DataCoordinator(DataUpdateCoordinator):
 class TariffCoordinator(DataUpdateCoordinator):
     """Data update coordinator for the tariff sensors."""
 
-    def __init__(self, hass: HomeAssistant, resource) -> None:
+    def __init__(self, hass: HomeAssistant, resource, tariff_interval) -> None:
         """Initialize tariff coordinator."""
         super().__init__(
             hass,
             _LOGGER,
             name=f"Tariff Data {resource.classifier}",  # More specific name for logging
-            update_interval=TARIFF_SCAN_INTERVAL,
+            update_interval=timedelta(minutes=tariff_interval),
         )
         self.resource = resource
 
@@ -473,7 +473,9 @@ async def async_setup_entry(
     meters: dict = {}
     daily_coordinators: dict[str, DataCoordinator] = {}
 
-    glowmarkt = hass.data[DOMAIN][entry.entry_id]
+    glowmarkt = hass.data[DOMAIN][entry.entry_id]["client"]
+    daily_interval = entry.data.get(CONF_DAILY_INTERVAL)
+    tariff_interval = entry.data.get(CONF_TARIFF_INTERVAL)
 
     virtual_entities: dict = {}
     try:
@@ -526,7 +528,7 @@ async def async_setup_entry(
             if resource.classifier in ["electricity.consumption", "gas.consumption"]:
                 if resource.classifier not in daily_coordinators:
                     daily_coordinators[resource.classifier] = DataCoordinator(
-                        hass, resource
+                        hass, resource, daily_interval
                     )
                     daily_coordinators[
                         resource.classifier
@@ -541,7 +543,7 @@ async def async_setup_entry(
                     "Added Usage sensor to list for entity %s", resource.classifier
                 )
 
-                coordinator = TariffCoordinator(hass, resource)
+                coordinator = TariffCoordinator(hass, resource, tariff_interval)
                 coordinator.async_config_entry_first_refresh()
 
                 standing_sensor = Standing(coordinator, resource, virtual_entity)
@@ -560,7 +562,7 @@ async def async_setup_entry(
             if resource.classifier == "gas.consumption.cost":
                 if resource.classifier not in daily_coordinators:
                     daily_coordinators[resource.classifier] = DataCoordinator(
-                        hass, resource
+                        hass, resource, daily_interval
                     )
                     daily_coordinators[
                         resource.classifier
@@ -575,7 +577,7 @@ async def async_setup_entry(
             elif resource.classifier == "electricity.consumption.cost":
                 if resource.classifier not in daily_coordinators:
                     daily_coordinators[resource.classifier] = DataCoordinator(
-                        hass, resource
+                        hass, resource, daily_interval
                     )
                     daily_coordinators[
                         resource.classifier
