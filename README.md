@@ -49,8 +49,11 @@ Then, add the integration:
   Visit the <i>Integrations</i> section in Home Assistant and click the <i>Add</i> button in the bottom right corner. Search for <code>Hildebrand Glow (DCC)</code> and input your credentials. <b>You may need to clear your browser cache before the integration appears in the list.</b>
 </details>
 
-Once added, the integration will attempt to setup by taking your BRIGHT credentials, and two parameters on how frequently to update the sensors.
-Please note: Do not set these parameters too frequently, as the data is only updated on the DCC (about) every 30 minutes or so.  If you set the 'scan intervals' too high, you will overload the API, but will not obtain higher refresh rates in your Home Assistant.
+Once added, the integration will attempt to setup by taking your BRIGHT credentials, and two parameters on how frequently to update the sensors:
+- Daily_refresh: This is the usage data from your meter (ie readings) - is updated at most every 30 mins on the DCC
+- Tarrif_refresh: This is the daily standing charge, and tarrif data - Unless you are on a complex tarrif, this will be mainly static for days.
+  
+Please note: Do not set these parameters too frequently, as the data is only updated on the DCC (about) every 30 minutes or so.  If you set the 'refresh intervals' too high, you will overload the API, but will not obtain higher refresh rates in your Home Assistant.
 
 ## Sensors
 
