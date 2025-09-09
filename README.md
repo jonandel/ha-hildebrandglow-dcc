@@ -35,7 +35,7 @@ Copy the `custom_components/hildebrandglow_dcc/` directory and all of its files 
 
 ## Configuration
 
-Once installed, restart Home Assistant:
+Once downloaded, restart Home Assistant:
 
 [![Open your Home Assistant instance and show the system dashboard.](https://my.home-assistant.io/badges/system_dashboard.svg)](https://my.home-assistant.io/redirect/system_dashboard/)
 
@@ -48,6 +48,9 @@ Then, add the integration:
   <summary>Manually add the Integration</summary>
   Visit the <i>Integrations</i> section in Home Assistant and click the <i>Add</i> button in the bottom right corner. Search for <code>Hildebrand Glow (DCC)</code> and input your credentials. <b>You may need to clear your browser cache before the integration appears in the list.</b>
 </details>
+
+Once added, the integration will attempt to setup by taking your BRIGHT credentials, and two parameters on how frequently to update the sensors.
+Please note: Do not set these parameters too frequently, as the data is only updated on the DCC (about) every 30 minutes or so.  If you set the 'scan intervals' too high, you will overload the API, but will not obtain higher refresh rates in your Home Assistant.
 
 ## Sensors
 
