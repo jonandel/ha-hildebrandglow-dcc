@@ -12,7 +12,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,15 +41,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     else:
         _LOGGER.debug("Successful authentication. API object created.")
 
-    # Set API object
-    hass.data[DOMAIN][entry.entry_id] = glowmarkt
-    _LOGGER.debug("API object stored in hass.data. Forwarding setup to platforms...")
+    # Set API object and config options
+    hass.data[DOMAIN][entry.entry_id] = {
+        "client": glowmarkt,
+        CONF_DAILY_INTERVAL: entry.data.get(CONF_DAILY_INTERVAL),
+        CONF_TARIFF_INTERVAL: entry.data.get(CONF_TARIFF_INTERVAL),
+    }
+    _LOGGER.debug("API object and config stored in hass.data. Forwarding setup to platforms...")
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     _LOGGER.debug("Finished async_setup_entry successfully.")
     return True
-
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
@@ -57,7 +60,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
         _LOGGER.debug("Unload successful.")
-    else:
-        _LOGGER.error("Unload failed.")
-
     return unload_ok
