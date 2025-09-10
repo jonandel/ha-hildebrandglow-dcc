@@ -13,7 +13,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 
-from .const import CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL, DOMAIN
+from .const import DOMAIN, CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,9 +48,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         CONF_DAILY_INTERVAL: entry.data.get(CONF_DAILY_INTERVAL),
         CONF_TARIFF_INTERVAL: entry.data.get(CONF_TARIFF_INTERVAL),
     }
-    _LOGGER.debug(
-        "API object and config stored in hass.data. Forwarding setup to platforms..."
-    )
+    _LOGGER.debug("API object and config stored in hass.data. Forwarding setup to platforms...")
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
