@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import asyncio
 from collections.abc import Callable
 from datetime import datetime, time, timedelta
 import logging
 
 import requests
+from requests.exceptions import ConnectionError, Timeout
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -25,11 +27,9 @@ from homeassistant.helpers.update_coordinator import (
 )
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .const import CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-SCAN_INTERVAL = timedelta(minutes=15)
-TARIFF_SCAN_INTERVAL = timedelta(minutes=60)
 
 # --- COORDINATOR CLASSES ---
 
@@ -37,14 +37,14 @@ TARIFF_SCAN_INTERVAL = timedelta(minutes=60)
 class DataCoordinator(DataUpdateCoordinator):
     """Data update coordinator for daily usage and cost sensors."""
 
-    def __init__(self, hass: HomeAssistant, glowmarkt_resource):
+    def __init__(self, hass: HomeAssistant, glowmarkt_resource, daily_interval):
         """Initialize daily data coordinator."""
         self.resource = glowmarkt_resource
         super().__init__(
             hass,
             _LOGGER,
             name=f"Daily Data {glowmarkt_resource.classifier}",
-            update_interval=SCAN_INTERVAL,
+            update_interval=timedelta(minutes=daily_interval),
         )
 
     async def _async_update_data(self):
@@ -59,9 +59,9 @@ class DataCoordinator(DataUpdateCoordinator):
                     f"No daily data received for {self.resource.classifier}"
                 )
             return value
-        except requests.Timeout as ex:
+        except Timeout as ex:
             raise UpdateFailed(f"Timeout fetching daily data: {ex}") from ex
-        except requests.exceptions.ConnectionError as ex:
+        except ConnectionError as ex:
             raise UpdateFailed(f"Connection error fetching daily data: {ex}") from ex
         except Exception as ex:
             if "Request failed" in str(ex):
@@ -78,13 +78,13 @@ class DataCoordinator(DataUpdateCoordinator):
 class TariffCoordinator(DataUpdateCoordinator):
     """Data update coordinator for the tariff sensors."""
 
-    def __init__(self, hass: HomeAssistant, resource) -> None:
+    def __init__(self, hass: HomeAssistant, resource, tariff_interval) -> None:
         """Initialize tariff coordinator."""
         super().__init__(
             hass,
             _LOGGER,
             name=f"Tariff Data {resource.classifier}",  # More specific name for logging
-            update_interval=TARIFF_SCAN_INTERVAL,
+            update_interval=timedelta(minutes=tariff_interval),
         )
         self.resource = resource
 
@@ -152,9 +152,9 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
             "Successful GET to https://api.glowmarkt.com/api/v0-1/resource/%s/catchup",
             resource.id,
         )
-    except requests.Timeout as ex:
+    except Timeout as ex:
         _LOGGER.error("Timeout: %s", ex)
-    except requests.exceptions.ConnectionError as ex:
+    except ConnectionError as ex:
         _LOGGER.error("Cannot connect: %s", ex)
     except Exception as ex:  # pylint: disable=broad-except
         if "Request failed" in str(ex):
@@ -206,11 +206,11 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
                 )
             # only return a value, if one or more values came back from the API.
             return v
-    except requests.Timeout as ex:
+    except Timeout as ex:
         _LOGGER.error("Timeout: %s", ex)
-    except requests.exceptions.ConnectionError as ex:
+    except ConnectionError as ex:
         _LOGGER.error("Cannot connect: %s", ex)
-    except Exception as ex:  # pylint: disable=broad-except
+    except Exception as ex:
         if "Request failed" in str(ex):
             _LOGGER.warning(
                 "Non-200 Status Code. The Glow API may be experiencing issues"
@@ -241,12 +241,12 @@ async def tariff_data(
             resource.id,
         )
         return None  # Explicitly return None on this specific condition
-    except requests.Timeout as ex:
+    except Timeout as ex:
         _LOGGER.error(
             "Timeout fetching tariff data for %s: %s", resource.classifier, ex
         )
         return None  # Let coordinator handle UpdateFailed
-    except requests.exceptions.ConnectionError as ex:
+    except ConnectionError as ex:
         _LOGGER.error(
             "Connection error fetching tariff data for %s: %s", resource.classifier, ex
         )
@@ -264,7 +264,17 @@ async def tariff_data(
                 resource.classifier,
                 ex,
             )
-        return None  # Let coordinator handle UpdateFailed
+        return None
+
+
+async def _delayed_first_refresh(coordinator: DataUpdateCoordinator, delay: int = 5):
+    """Perform first refresh after a delay."""
+    _LOGGER.debug(
+        "Scheduling delayed first refresh for %s in %d seconds", coordinator.name, delay
+    )
+    await asyncio.sleep(delay)
+    await coordinator.async_request_refresh()
+    _LOGGER.debug("Completed delayed first refresh for %s", coordinator.name)
 
 
 # --- SENSOR BASE CLASS ---
@@ -472,8 +482,11 @@ async def async_setup_entry(
     entities: list = []
     meters: dict = {}
     daily_coordinators: dict[str, DataCoordinator] = {}
+    tariff_coordinators: dict[str, TariffCoordinator] = {}
 
-    glowmarkt = hass.data[DOMAIN][entry.entry_id]
+    glowmarkt = hass.data[DOMAIN][entry.entry_id]["client"]
+    daily_interval = entry.data.get(CONF_DAILY_INTERVAL)
+    tariff_interval = entry.data.get(CONF_TARIFF_INTERVAL)
 
     virtual_entities: dict = {}
     try:
@@ -482,10 +495,9 @@ async def async_setup_entry(
             glowmarkt.get_virtual_entities
         )
         _LOGGER.debug("Successful GET to %svirtualentity", glowmarkt.url)
-    except requests.Timeout as ex:
-        _LOGGER.error("Timeout: %s", ex)
-    except requests.exceptions.ConnectionError as ex:
-        _LOGGER.error("Cannot connect: %s", ex)
+    except (Timeout, ConnectionError) as ex:
+        _LOGGER.error("Failed to get virtual entities: %s", ex)
+        return False
     except Exception as ex:
         if "Request failed" in str(ex):
             _LOGGER.error(
@@ -493,6 +505,7 @@ async def async_setup_entry(
             )
         else:
             _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
+        return False
 
     for virtual_entity in virtual_entities:
         _LOGGER.debug("Found virtual entity: %s", virtual_entity.name)
@@ -507,10 +520,9 @@ async def async_setup_entry(
                 glowmarkt.url,
                 virtual_entity.id,
             )
-        except requests.Timeout as ex:
-            _LOGGER.error("Timeout: %s", ex)
-        except requests.exceptions.ConnectionError as ex:
-            _LOGGER.error("Cannot connect: %s", ex)
+        except (Timeout, ConnectionError) as ex:
+            _LOGGER.error("Failed to get resources: %s", ex)
+            continue
         except Exception as ex:
             if "Request failed" in str(ex):
                 _LOGGER.error(
@@ -518,6 +530,7 @@ async def async_setup_entry(
                 )
             else:
                 _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
+            continue
 
         for resource in resources:
             _LOGGER.debug(
@@ -526,11 +539,14 @@ async def async_setup_entry(
             if resource.classifier in ["electricity.consumption", "gas.consumption"]:
                 if resource.classifier not in daily_coordinators:
                     daily_coordinators[resource.classifier] = DataCoordinator(
-                        hass, resource
+                        hass, resource, daily_interval
                     )
-                    daily_coordinators[
-                        resource.classifier
-                    ].async_config_entry_first_refresh()
+                    # Schedule delayed first refresh instead of immediate call
+                    hass.async_create_task(
+                        _delayed_first_refresh(
+                            daily_coordinators[resource.classifier], 5
+                        )
+                    )
 
                 usage_sensor = Usage(
                     daily_coordinators[resource.classifier], resource, virtual_entity
@@ -541,16 +557,28 @@ async def async_setup_entry(
                     "Added Usage sensor to list for entity %s", resource.classifier
                 )
 
-                coordinator = TariffCoordinator(hass, resource)
-                coordinator.async_config_entry_first_refresh()
+                if resource.classifier not in tariff_coordinators:
+                    tariff_coordinators[resource.classifier] = TariffCoordinator(
+                        hass, resource, tariff_interval
+                    )
+                    # Schedule delayed first refresh instead of immediate call
+                    hass.async_create_task(
+                        _delayed_first_refresh(
+                            tariff_coordinators[resource.classifier], 5
+                        )
+                    )
 
-                standing_sensor = Standing(coordinator, resource, virtual_entity)
+                standing_sensor = Standing(
+                    tariff_coordinators[resource.classifier], resource, virtual_entity
+                )
                 entities.append(standing_sensor)
                 _LOGGER.debug(
                     "Added Standing sensor to list for entity %s", resource.classifier
                 )
 
-                rate_sensor = Rate(coordinator, resource, virtual_entity)
+                rate_sensor = Rate(
+                    tariff_coordinators[resource.classifier], resource, virtual_entity
+                )
                 entities.append(rate_sensor)
                 _LOGGER.debug(
                     "Added Rate sensor to list for entity %s", resource.classifier
@@ -560,11 +588,14 @@ async def async_setup_entry(
             if resource.classifier == "gas.consumption.cost":
                 if resource.classifier not in daily_coordinators:
                     daily_coordinators[resource.classifier] = DataCoordinator(
-                        hass, resource
+                        hass, resource, daily_interval
                     )
-                    daily_coordinators[
-                        resource.classifier
-                    ].async_config_entry_first_refresh()
+                    # Schedule delayed first refresh instead of immediate call
+                    hass.async_create_task(
+                        _delayed_first_refresh(
+                            daily_coordinators[resource.classifier], 5
+                        )
+                    )
 
                 cost_sensor = Cost(
                     daily_coordinators[resource.classifier], resource, virtual_entity
@@ -575,11 +606,14 @@ async def async_setup_entry(
             elif resource.classifier == "electricity.consumption.cost":
                 if resource.classifier not in daily_coordinators:
                     daily_coordinators[resource.classifier] = DataCoordinator(
-                        hass, resource
+                        hass, resource, daily_interval
                     )
-                    daily_coordinators[
-                        resource.classifier
-                    ].async_config_entry_first_refresh()
+                    # Schedule delayed first refresh instead of immediate call
+                    hass.async_create_task(
+                        _delayed_first_refresh(
+                            daily_coordinators[resource.classifier], 5
+                        )
+                    )
 
                 cost_sensor = Cost(
                     daily_coordinators[resource.classifier], resource, virtual_entity

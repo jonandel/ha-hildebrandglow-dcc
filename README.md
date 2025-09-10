@@ -35,7 +35,7 @@ Copy the `custom_components/hildebrandglow_dcc/` directory and all of its files 
 
 ## Configuration
 
-Once installed, restart Home Assistant:
+Once downloaded, restart Home Assistant:
 
 [![Open your Home Assistant instance and show the system dashboard.](https://my.home-assistant.io/badges/system_dashboard.svg)](https://my.home-assistant.io/redirect/system_dashboard/)
 
@@ -48,6 +48,12 @@ Then, add the integration:
   <summary>Manually add the Integration</summary>
   Visit the <i>Integrations</i> section in Home Assistant and click the <i>Add</i> button in the bottom right corner. Search for <code>Hildebrand Glow (DCC)</code> and input your credentials. <b>You may need to clear your browser cache before the integration appears in the list.</b>
 </details>
+
+Once added, the integration will attempt to setup by taking your BRIGHT credentials, and two parameters on how frequently to update the sensors:
+- Daily_refresh: This is the usage data from your meter (ie readings) - is updated at most every 30 mins on the DCC
+- Tarrif_refresh: This is the daily standing charge, and tarrif data - Unless you are on a complex tarrif, this will be mainly static for days.
+  
+Please note: Do not set these parameters too frequently, as the data is only updated on the DCC (about) every 30 minutes or so.  If you set the 'refresh intervals' too high, you will overload the API, but will not obtain higher refresh rates in your Home Assistant.
 
 ## Sensors
 
@@ -83,12 +89,7 @@ logger:
   logs:
     custom_components.hildebrandglow_dcc: debug
 ```
-Please Note: This Integration uses a (recent in 2025) best practice to load the Integration, ensuring the first call to the API verifying the resources, but does not then wait for the data in the sensors to be populated.
-You will see warnings in the logs such as this (typically three, or more, depending upon what resources you have):
-```
-       WARNING (MainThread) [py.warnings] /config/custom_components/hildebrandglow_dcc/sensor.py:533: RuntimeWarning: coroutine 'DataUpdateCoordinator.async_config_entry_first_refresh' was never awaited
-```
-This is normal and expected behaviour (of Home Assistant, not the Integration).
+Please Note: This Integration uses a (recent in 2025) best practice to Setup the Integration, ensuring the first call to the API verifying the resources, and creating the sensors, but does not then wait for the data in the sensors to be populated.  The first call of the data population is delayed for five seconds after successful Integration Setup.
 
 
 ## Development

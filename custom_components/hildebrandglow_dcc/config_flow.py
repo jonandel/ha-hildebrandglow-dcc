@@ -13,7 +13,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 
-from .const import DOMAIN
+from .const import CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,6 +21,12 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required("username"): str,
         vol.Required("password"): str,
+        vol.Optional(CONF_DAILY_INTERVAL, default=15): vol.All(
+            vol.Coerce(int), vol.Range(min=1)
+        ),
+        vol.Optional(CONF_TARIFF_INTERVAL, default=60): vol.All(
+            vol.Coerce(int), vol.Range(min=1)
+        ),
     }
 )
 
@@ -30,9 +36,14 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
-    glowmarkt = await hass.async_add_executor_job(
-        BrightClient, data["username"], data["password"]
-    )
+    try:
+        glowmarkt = await hass.async_add_executor_job(
+            BrightClient, data["username"], data["password"]
+        )
+    except (requests.Timeout, requests.exceptions.ConnectionError, ValueError) as ex:
+        _LOGGER.error("Authentication failed: %s", ex)
+        raise ValueError("Authentication failed") from ex
+
     _LOGGER.debug("Successful Post to %sauth", glowmarkt.url)
 
     # Return title of the entry to be added
@@ -65,17 +76,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         except requests.exceptions.ConnectionError as ex:
             _LOGGER.debug("Cannot connect: %s", ex)
             errors["base"] = "cannot_connect"
-        # Can't use the RuntimeError exception from the library as it's not a subclass of Exception
+        except ValueError:
+            _LOGGER.debug("Authentication Failed")
+            errors["base"] = "invalid_auth"
         except Exception as ex:  # pylint: disable=broad-except
-            if "Authentication failed" in str(ex):
-                _LOGGER.debug("Authentication Failed")
-                errors["base"] = "invalid_auth"
-            elif "Expected an authentication token" in str(ex):
-                _LOGGER.debug("Expected an authentication token but didn't get one")
-                errors["base"] = "invalid_auth"
-            else:
-                _LOGGER.exception("Unexpected exception: %s", ex)
-                errors["base"] = "unknown"
+            _LOGGER.exception("Unexpected exception: %s", ex)
+            errors["base"] = "unknown"
         else:
             return self.async_create_entry(title=info["title"], data=user_input)
 
