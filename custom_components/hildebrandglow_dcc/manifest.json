@@ -13,5 +13,5 @@
   "requirements": [
     "pyglowmarkt==0.5.6"
   ],
-  "version": "1.2.0"
+  "version": "1.2.5"
 }
