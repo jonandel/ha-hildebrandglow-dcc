@@ -13,7 +13,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 
-from .const import CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL, DOMAIN
+from .const import DOMAIN, CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
