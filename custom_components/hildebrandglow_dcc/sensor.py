@@ -36,6 +36,7 @@ _LOGGER = logging.getLogger(__name__)
 
 class DataCoordinator(DataUpdateCoordinator):
     """Data update coordinator for daily usage and cost sensors."""
+
     def __init__(self, hass: HomeAssistant, glowmarkt_resource, daily_interval):
         """Initialize daily data coordinator."""
         self.resource = glowmarkt_resource
@@ -111,6 +112,7 @@ class TariffCoordinator(DataUpdateCoordinator):
 
 
 # --- HELPER FUNCTIONS ---
+
 
 def supply_type(resource) -> str:
     """Return supply type."""
