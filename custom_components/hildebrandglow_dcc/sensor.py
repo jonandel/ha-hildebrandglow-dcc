@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from datetime import datetime, time, timedelta
@@ -268,6 +269,18 @@ async def tariff_data(
         return None
 
 
+async def _delayed_first_refresh(coordinator: DataUpdateCoordinator, delay: int = 5):
+    """Perform first refresh after a delay."""
+    _LOGGER.debug(
+        "Scheduling delayed first refresh for %s in %d seconds", 
+        coordinator.name, 
+        delay
+    )
+    await asyncio.sleep(delay)
+    await coordinator.async_request_refresh()
+    _LOGGER.debug("Completed delayed first refresh for %s", coordinator.name)
+
+
 # --- SENSOR BASE CLASS ---
 
 
@@ -532,9 +545,10 @@ async def async_setup_entry(
                     daily_coordinators[resource.classifier] = DataCoordinator(
                         hass, resource, daily_interval
                     )
-                    daily_coordinators[
-                        resource.classifier
-                    ].async_config_entry_first_refresh()
+                    # Schedule delayed first refresh instead of immediate call
+                    hass.async_create_task(
+                        _delayed_first_refresh(daily_coordinators[resource.classifier], 5)
+                    )
 
                 usage_sensor = Usage(
                     daily_coordinators[resource.classifier], resource, virtual_entity
@@ -549,9 +563,10 @@ async def async_setup_entry(
                     tariff_coordinators[resource.classifier] = TariffCoordinator(
                         hass, resource, tariff_interval
                     )
-                    tariff_coordinators[
-                        resource.classifier
-                    ].async_config_entry_first_refresh()
+                    # Schedule delayed first refresh instead of immediate call
+                    hass.async_create_task(
+                        _delayed_first_refresh(tariff_coordinators[resource.classifier], 5)
+                    )
 
                 standing_sensor = Standing(
                     tariff_coordinators[resource.classifier], resource, virtual_entity
@@ -575,9 +590,10 @@ async def async_setup_entry(
                     daily_coordinators[resource.classifier] = DataCoordinator(
                         hass, resource, daily_interval
                     )
-                    daily_coordinators[
-                        resource.classifier
-                    ].async_config_entry_first_refresh()
+                    # Schedule delayed first refresh instead of immediate call
+                    hass.async_create_task(
+                        _delayed_first_refresh(daily_coordinators[resource.classifier], 5)
+                    )
 
                 cost_sensor = Cost(
                     daily_coordinators[resource.classifier], resource, virtual_entity
@@ -590,9 +606,10 @@ async def async_setup_entry(
                     daily_coordinators[resource.classifier] = DataCoordinator(
                         hass, resource, daily_interval
                     )
-                    daily_coordinators[
-                        resource.classifier
-                    ].async_config_entry_first_refresh()
+                    # Schedule delayed first refresh instead of immediate call
+                    hass.async_create_task(
+                        _delayed_first_refresh(daily_coordinators[resource.classifier], 5)
+                    )
 
                 cost_sensor = Cost(
                     daily_coordinators[resource.classifier], resource, virtual_entity
