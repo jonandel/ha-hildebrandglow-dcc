@@ -6,6 +6,7 @@ import logging
 
 from glowmarkt import BrightClient
 import requests
+from requests.exceptions import ConnectionError, Timeout
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
@@ -29,13 +30,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         glowmarkt = await hass.async_add_executor_job(
             BrightClient, entry.data["username"], entry.data["password"]
         )
-    except requests.Timeout as ex:
+    except Timeout as ex:
         _LOGGER.error("Timeout during API authentication: %s", ex)
         raise ConfigEntryNotReady(f"Timeout: {ex}") from ex
-    except requests.exceptions.ConnectionError as ex:
+    except ConnectionError as ex:
         _LOGGER.error("Connection error during API authentication: %s", ex)
         raise ConfigEntryNotReady(f"Cannot connect: {ex}") from ex
-    except Exception as ex:  # pylint: disable=broad-except
+    except Exception as ex:
         _LOGGER.exception("Unexpected exception during API authentication: %s", ex)
         raise ConfigEntryNotReady(f"Unexpected exception: {ex}") from ex
     else:
@@ -54,10 +55,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _LOGGER.debug("Finished async_setup_entry successfully.")
     return True
 
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     _LOGGER.debug("Starting async_unload_entry for %s", DOMAIN)
-    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+    if await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
         _LOGGER.debug("Unload successful.")
-    return unload_ok
+        return True
+    return False
