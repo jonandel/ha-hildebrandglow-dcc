@@ -26,7 +26,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL
+from .const import CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 # SCAN_INTERVAL = timedelta(minutes=15)
@@ -553,13 +553,17 @@ async def async_setup_entry(
                         resource.classifier
                     ].async_config_entry_first_refresh()
 
-                standing_sensor = Standing(tariff_coordinators[resource.classifier], resource, virtual_entity)
+                standing_sensor = Standing(
+                    tariff_coordinators[resource.classifier], resource, virtual_entity
+                )
                 entities.append(standing_sensor)
                 _LOGGER.debug(
                     "Added Standing sensor to list for entity %s", resource.classifier
                 )
 
-                rate_sensor = Rate(tariff_coordinators[resource.classifier], resource, virtual_entity)
+                rate_sensor = Rate(
+                    tariff_coordinators[resource.classifier], resource, virtual_entity
+                )
                 entities.append(rate_sensor)
                 _LOGGER.debug(
                     "Added Rate sensor to list for entity %s", resource.classifier
