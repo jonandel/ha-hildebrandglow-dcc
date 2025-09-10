@@ -8,6 +8,7 @@ from datetime import datetime, time, timedelta
 import logging
 
 import requests
+from requests.exceptions import ConnectionError, Timeout
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -59,9 +60,9 @@ class DataCoordinator(DataUpdateCoordinator):
                     f"No daily data received for {self.resource.classifier}"
                 )
             return value
-        except requests.Timeout as ex:
+        except Timeout as ex:
             raise UpdateFailed(f"Timeout fetching daily data: {ex}") from ex
-        except requests.exceptions.ConnectionError as ex:
+        except ConnectionError as ex:
             raise UpdateFailed(f"Connection error fetching daily data: {ex}") from ex
         except Exception as ex:
             if "Request failed" in str(ex):
@@ -152,9 +153,9 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
             "Successful GET to https://api.glowmarkt.com/api/v0-1/resource/%s/catchup",
             resource.id,
         )
-    except requests.Timeout as ex:
+    except Timeout as ex:
         _LOGGER.error("Timeout: %s", ex)
-    except requests.exceptions.ConnectionError as ex:
+    except ConnectionError as ex:
         _LOGGER.error("Cannot connect: %s", ex)
     except Exception as ex:  # pylint: disable=broad-except
         if "Request failed" in str(ex):
@@ -206,11 +207,11 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
                 )
             # only return a value, if one or more values came back from the API.
             return v
-    except requests.Timeout as ex:
+    except Timeout as ex:
         _LOGGER.error("Timeout: %s", ex)
-    except requests.exceptions.ConnectionError as ex:
+    except ConnectionError as ex:
         _LOGGER.error("Cannot connect: %s", ex)
-    except Exception as ex:  # pylint: disable=broad-except
+    except Exception as ex:
         if "Request failed" in str(ex):
             _LOGGER.warning(
                 "Non-200 Status Code. The Glow API may be experiencing issues"
@@ -241,12 +242,12 @@ async def tariff_data(
             resource.id,
         )
         return None  # Explicitly return None on this specific condition
-    except requests.Timeout as ex:
+    except Timeout as ex:
         _LOGGER.error(
             "Timeout fetching tariff data for %s: %s", resource.classifier, ex
         )
         return None  # Let coordinator handle UpdateFailed
-    except requests.exceptions.ConnectionError as ex:
+    except ConnectionError as ex:
         _LOGGER.error(
             "Connection error fetching tariff data for %s: %s", resource.classifier, ex
         )
@@ -264,7 +265,7 @@ async def tariff_data(
                 resource.classifier,
                 ex,
             )
-        return None  # Let coordinator handle UpdateFailed
+        return None
 
 
 # --- SENSOR BASE CLASS ---
@@ -472,6 +473,7 @@ async def async_setup_entry(
     entities: list = []
     meters: dict = {}
     daily_coordinators: dict[str, DataCoordinator] = {}
+    tariff_coordinators: dict[str, TariffCoordinator] = {}
 
     glowmarkt = hass.data[DOMAIN][entry.entry_id]["client"]
     daily_interval = entry.data.get(CONF_DAILY_INTERVAL)
@@ -484,10 +486,9 @@ async def async_setup_entry(
             glowmarkt.get_virtual_entities
         )
         _LOGGER.debug("Successful GET to %svirtualentity", glowmarkt.url)
-    except requests.Timeout as ex:
-        _LOGGER.error("Timeout: %s", ex)
-    except requests.exceptions.ConnectionError as ex:
-        _LOGGER.error("Cannot connect: %s", ex)
+    except (Timeout, ConnectionError) as ex:
+        _LOGGER.error("Failed to get virtual entities: %s", ex)
+        return False
     except Exception as ex:
         if "Request failed" in str(ex):
             _LOGGER.error(
@@ -495,6 +496,7 @@ async def async_setup_entry(
             )
         else:
             _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
+        return False
 
     for virtual_entity in virtual_entities:
         _LOGGER.debug("Found virtual entity: %s", virtual_entity.name)
@@ -509,10 +511,9 @@ async def async_setup_entry(
                 glowmarkt.url,
                 virtual_entity.id,
             )
-        except requests.Timeout as ex:
-            _LOGGER.error("Timeout: %s", ex)
-        except requests.exceptions.ConnectionError as ex:
-            _LOGGER.error("Cannot connect: %s", ex)
+        except (Timeout, ConnectionError) as ex:
+            _LOGGER.error("Failed to get resources: %s", ex)
+            continue
         except Exception as ex:
             if "Request failed" in str(ex):
                 _LOGGER.error(
@@ -520,6 +521,7 @@ async def async_setup_entry(
                 )
             else:
                 _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
+            continue
 
         for resource in resources:
             _LOGGER.debug(
@@ -543,16 +545,21 @@ async def async_setup_entry(
                     "Added Usage sensor to list for entity %s", resource.classifier
                 )
 
-                coordinator = TariffCoordinator(hass, resource, tariff_interval)
-                coordinator.async_config_entry_first_refresh()
+                if resource.classifier not in tariff_coordinators:
+                    tariff_coordinators[resource.classifier] = TariffCoordinator(
+                        hass, resource, tariff_interval
+                    )
+                    tariff_coordinators[
+                        resource.classifier
+                    ].async_config_entry_first_refresh()
 
-                standing_sensor = Standing(coordinator, resource, virtual_entity)
+                standing_sensor = Standing(tariff_coordinators[resource.classifier], resource, virtual_entity)
                 entities.append(standing_sensor)
                 _LOGGER.debug(
                     "Added Standing sensor to list for entity %s", resource.classifier
                 )
 
-                rate_sensor = Rate(coordinator, resource, virtual_entity)
+                rate_sensor = Rate(tariff_coordinators[resource.classifier], resource, virtual_entity)
                 entities.append(rate_sensor)
                 _LOGGER.debug(
                     "Added Rate sensor to list for entity %s", resource.classifier
