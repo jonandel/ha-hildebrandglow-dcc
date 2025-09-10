@@ -30,15 +30,12 @@ from homeassistant.util import dt as dt_util
 from .const import CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-# SCAN_INTERVAL = timedelta(minutes=15)
-# TARIFF_SCAN_INTERVAL = timedelta(minutes=60)
 
 # --- COORDINATOR CLASSES ---
 
 
 class DataCoordinator(DataUpdateCoordinator):
     """Data update coordinator for daily usage and cost sensors."""
-
     def __init__(self, hass: HomeAssistant, glowmarkt_resource, daily_interval):
         """Initialize daily data coordinator."""
         self.resource = glowmarkt_resource
@@ -114,7 +111,6 @@ class TariffCoordinator(DataUpdateCoordinator):
 
 
 # --- HELPER FUNCTIONS ---
-
 
 def supply_type(resource) -> str:
     """Return supply type."""
