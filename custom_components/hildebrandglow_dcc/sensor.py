@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 from abc import ABC, abstractmethod
+import asyncio
 from collections.abc import Callable
 from datetime import datetime, time, timedelta
 import logging
@@ -272,9 +272,7 @@ async def tariff_data(
 async def _delayed_first_refresh(coordinator: DataUpdateCoordinator, delay: int = 5):
     """Perform first refresh after a delay."""
     _LOGGER.debug(
-        "Scheduling delayed first refresh for %s in %d seconds", 
-        coordinator.name, 
-        delay
+        "Scheduling delayed first refresh for %s in %d seconds", coordinator.name, delay
     )
     await asyncio.sleep(delay)
     await coordinator.async_request_refresh()
@@ -547,7 +545,9 @@ async def async_setup_entry(
                     )
                     # Schedule delayed first refresh instead of immediate call
                     hass.async_create_task(
-                        _delayed_first_refresh(daily_coordinators[resource.classifier], 5)
+                        _delayed_first_refresh(
+                            daily_coordinators[resource.classifier], 5
+                        )
                     )
 
                 usage_sensor = Usage(
@@ -565,7 +565,9 @@ async def async_setup_entry(
                     )
                     # Schedule delayed first refresh instead of immediate call
                     hass.async_create_task(
-                        _delayed_first_refresh(tariff_coordinators[resource.classifier], 5)
+                        _delayed_first_refresh(
+                            tariff_coordinators[resource.classifier], 5
+                        )
                     )
 
                 standing_sensor = Standing(
@@ -592,7 +594,9 @@ async def async_setup_entry(
                     )
                     # Schedule delayed first refresh instead of immediate call
                     hass.async_create_task(
-                        _delayed_first_refresh(daily_coordinators[resource.classifier], 5)
+                        _delayed_first_refresh(
+                            daily_coordinators[resource.classifier], 5
+                        )
                     )
 
                 cost_sensor = Cost(
@@ -608,7 +612,9 @@ async def async_setup_entry(
                     )
                     # Schedule delayed first refresh instead of immediate call
                     hass.async_create_task(
-                        _delayed_first_refresh(daily_coordinators[resource.classifier], 5)
+                        _delayed_first_refresh(
+                            daily_coordinators[resource.classifier], 5
+                        )
                     )
 
                 cost_sensor = Cost(
