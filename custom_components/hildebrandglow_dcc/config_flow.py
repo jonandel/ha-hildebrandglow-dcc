@@ -53,6 +53,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Hildebrand Glow (DCC)."""
 
+    # Change version to force the setup to run and update stale setup/cached values.    
     VERSION = 2
 
     async def async_step_user(
