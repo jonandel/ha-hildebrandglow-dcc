@@ -2,10 +2,6 @@
 
 DOMAIN = "hildebrandglow_dcc"
 
-# Config Flow
-CONF_DAILY_INTERVAL = "daily_refresh_interval_minutes"
-CONF_TARIFF_INTERVAL = "tariff_refresh_interval_minutes"
-
 # Virtual Entity Classifiers
 ELEC_CONSUMPTION_CLASSIFIER = "electricity.consumption"
 GAS_CONSUMPTION_CLASSIFIER = "gas.consumption"
@@ -15,3 +11,7 @@ GAS_COST_CLASSIFIER = "gas.consumption.cost"
 # Device Types
 ELECTRIC_METER = "electric_meter"
 GAS_METER = "gas_meter"
+
+# ADD THESE LINES
+CONF_DAILY_INTERVAL = "daily_interval"
+CONF_TARIFF_INTERVAL = "tariff_interval"
