@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 import asyncio
-from collections.abc import Callable
-from datetime import datetime, time, timedelta
 import logging
-
-import requests
-from requests.exceptions import ConnectionError, Timeout
+from abc import ABC, abstractmethod
+from collections.abc import Callable
+from datetime import timedelta
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -26,10 +23,12 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 from homeassistant.util import dt as dt_util
+import requests
 
 from .const import CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
 
 # --- COORDINATOR CLASSES ---
 
@@ -59,9 +58,9 @@ class DataCoordinator(DataUpdateCoordinator):
                     f"No daily data received for {self.resource.classifier}"
                 )
             return value
-        except Timeout as ex:
+        except requests.exceptions.Timeout as ex:
             raise UpdateFailed(f"Timeout fetching daily data: {ex}") from ex
-        except ConnectionError as ex:
+        except requests.exceptions.ConnectionError as ex:
             raise UpdateFailed(f"Connection error fetching daily data: {ex}") from ex
         except Exception as ex:
             if "Request failed" in str(ex):
@@ -101,7 +100,7 @@ class TariffCoordinator(DataUpdateCoordinator):
                 )
             return tariff
         except (
-            Exception
+                Exception
         ) as ex:
             _LOGGER.exception(
                 "Error fetching tariff data for %s: %s", self.resource.classifier, ex
@@ -144,7 +143,7 @@ def device_name(resource, virtual_entity) -> str:
     return name
 
 
-async def daily_data(hass: HomeAssistant, resource) -> float:
+async def daily_data(hass: HomeAssistant, resource) -> float | None:
     """Get Summ for the day from the API."""
     _LOGGER.debug("Fetching today's data")
     now = dt_util.utcnow()
@@ -157,9 +156,9 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
             "Successful GET to https://api.glowmarkt.com/api/v0-1/resource/%s/catchup",
             resource.id,
         )
-    except Timeout as ex:
+    except requests.exceptions.Timeout as ex:
         _LOGGER.error("Timeout: %s", ex)
-    except ConnectionError as ex:
+    except requests.exceptions.ConnectionError as ex:
         _LOGGER.error("Cannot connect: %s", ex)
     except Exception as ex:
         if "Request failed" in str(ex):
@@ -207,9 +206,9 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
                     readings[1][1].value,
                 )
             return v
-    except Timeout as ex:
+    except requests.exceptions.Timeout as ex:
         _LOGGER.error("Timeout: %s", ex)
-    except ConnectionError as ex:
+    except requests.exceptions.ConnectionError as ex:
         _LOGGER.error("Cannot connect: %s", ex)
     except Exception as ex:
         if "Request failed" in str(ex):
@@ -222,7 +221,7 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
 
 
 async def tariff_data(
-    hass: HomeAssistant, resource
+        hass: HomeAssistant, resource
 ):
     """Get tariff data from the API."""
     try:
@@ -240,12 +239,12 @@ async def tariff_data(
             resource.id,
         )
         return None
-    except Timeout as ex:
+    except requests.exceptions.Timeout as ex:
         _LOGGER.error(
             "Timeout fetching tariff data for %s: %s", resource.classifier, ex
         )
         return None
-    except ConnectionError as ex:
+    except requests.exceptions.ConnectionError as ex:
         _LOGGER.error(
             "Connection error fetching tariff data for %s: %s", resource.classifier, ex
         )
@@ -273,7 +272,7 @@ class GlowDCCSensor(CoordinatorEntity, SensorEntity, ABC):
     """Base class for Hildebrand Glow DCC sensors."""
 
     def __init__(
-        self, coordinator: DataUpdateCoordinator, resource, virtual_entity
+            self, coordinator: DataUpdateCoordinator, resource, virtual_entity
     ) -> None:
         super().__init__(coordinator)
         self.resource = resource
@@ -283,8 +282,8 @@ class GlowDCCSensor(CoordinatorEntity, SensorEntity, ABC):
     def device_info(self) -> DeviceInfo:
         """Return device information."""
         identifier_resource = self.resource
-        if hasattr(self, "meter") and self.meter is not None:
-            identifier_resource = self.meter.resource
+        if (meter := getattr(self, "meter", None)) is not None:
+            identifier_resource = meter.resource
 
         return DeviceInfo(
             identifiers={(DOMAIN, identifier_resource.id)},
@@ -319,7 +318,7 @@ class Usage(GlowDCCSensor):
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
 
     def __init__(
-        self, coordinator: DataUpdateCoordinator, resource, virtual_entity
+            self, coordinator: DataUpdateCoordinator, resource, virtual_entity
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, resource, virtual_entity)
@@ -349,7 +348,7 @@ class Cost(GlowDCCSensor):
     _attr_state_class = SensorStateClass.TOTAL
 
     def __init__(
-        self, coordinator: DataUpdateCoordinator, resource, virtual_entity
+            self, coordinator: DataUpdateCoordinator, resource, virtual_entity
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, resource, virtual_entity)
@@ -373,7 +372,7 @@ class Standing(CoordinatorEntity, SensorEntity):
     _attr_entity_registry_enabled_default = False
 
     def __init__(
-        self, coordinator: DataUpdateCoordinator, resource, virtual_entity
+            self, coordinator: DataUpdateCoordinator, resource, virtual_entity
     ) -> None:
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
@@ -389,9 +388,9 @@ class Standing(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        if self.coordinator.data:
+        if data := getattr(self.coordinator, "data", None):
             value = (
-                float(self.coordinator.data.current_rates.standing_charge.value) / 100
+                    float(data.current_rates.standing_charge.value) / 100
             )
             self._attr_native_value = round(value, 4)
             self.async_write_ha_state()
@@ -418,7 +417,7 @@ class Rate(CoordinatorEntity, SensorEntity):
     _attr_entity_registry_enabled_default = False
 
     def __init__(
-        self, coordinator: DataUpdateCoordinator, resource, virtual_entity
+            self, coordinator: DataUpdateCoordinator, resource, virtual_entity
     ) -> None:
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
@@ -432,8 +431,8 @@ class Rate(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        if self.coordinator.data:
-            value = float(self.coordinator.data.current_rates.rate.value) / 100
+        if data := getattr(self.coordinator, "data", None):
+            value = float(data.current_rates.rate.value) / 100
             self._attr_native_value = round(value, 4)
             self.async_write_ha_state()
 
@@ -452,7 +451,7 @@ class Rate(CoordinatorEntity, SensorEntity):
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: Callable
+        hass: HomeAssistant, entry: ConfigEntry, async_add_entities: Callable
 ) -> bool:
     """Set up the sensor platform."""
     _LOGGER.debug("Starting async_setup_entry in sensor platform.")
@@ -465,14 +464,13 @@ async def async_setup_entry(
     daily_interval = hass.data[DOMAIN][entry.entry_id][CONF_DAILY_INTERVAL]
     tariff_interval = hass.data[DOMAIN][entry.entry_id][CONF_TARIFF_INTERVAL]
 
-    virtual_entities: dict = {}
     try:
         _LOGGER.debug("Fetching virtual entities from API...")
         virtual_entities = await hass.async_add_executor_job(
             glowmarkt.get_virtual_entities
         )
         _LOGGER.debug("Successful GET to %svirtualentity", glowmarkt.url)
-    except (Timeout, ConnectionError) as ex:
+    except (requests.exceptions.Timeout, ConnectionError) as ex:
         _LOGGER.error("Failed to get virtual entities: %s", ex)
         return False
     except Exception as ex:
@@ -486,7 +484,6 @@ async def async_setup_entry(
 
     for virtual_entity in virtual_entities:
         _LOGGER.debug("Found virtual entity: %s", virtual_entity.name)
-        resources: dict = {}
         try:
             _LOGGER.debug(
                 "Fetching resources for virtual entity %s...", virtual_entity.name
@@ -497,7 +494,7 @@ async def async_setup_entry(
                 glowmarkt.url,
                 virtual_entity.id,
             )
-        except (Timeout, ConnectionError) as ex:
+        except (requests.exceptions.Timeout, ConnectionError) as ex:
             _LOGGER.error("Failed to get resources: %s", ex)
             continue
         except Exception as ex:
