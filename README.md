@@ -11,7 +11,7 @@ The idea is that this new Repo will be a place where the community of users can 
 
 Note: in order to create debugging information as the integration is setup, then you need to configure the logger (for debug) as defined below - ie BEFORE, you 'Add Integration'.
 Please Note: in this version of the Integration, the devices and sensors are defined once the integration is setup (the part where you have added the integration, and then entered your Glow username and Password).  
-The sensors will immediately appear as 'unavailable' whilst the Glow API is polled for your data - this can take up to 30 minutes for the meter readings (your usage); and up to 2 hours for the rate and tarrif information, once you have enabled them.
+The sensors will immediately appear as 'unavailable' for about five second whilst the Glow API is polled for your first set of data - the next poll is set at 15 minutes, and 60 minutes for the Tarrif data (see below on Integration Settings).
 
 
 ## Installation
@@ -55,6 +55,11 @@ Once added, the integration will attempt to setup by taking your BRIGHT credenti
   
 Please note: Do not set these parameters too frequently, as the data is only updated on the DCC (about) every 30 minutes or so.  If you set the 'refresh intervals' too high, you will overload the API, but will not obtain higher refresh rates in your Home Assistant.
 
+## Upgrading
+
+If upgrading from a an older version of this integration, e.g when pushed from HACS, you may need to delete the integration, and then re add it to update the configurations (which get cached).
+To do this, let HACS download the new version, and then restart Home Assistant (as HACS does for you).  Then in Settings/Integrations, open this Integration, and if there are errors reported, select 'Delete' from the three dots next to the 'Hildebrand Glow (DCC)' Hub. Then do a restart of Home Assistant.  Then go back into Integrations, and 'Add Integration' and add this integration again.  That will prompt HA to re-setup everything.
+
 ## Sensors
 
 Once you've authenticated, the integration will automatically set up the following sensors for each of the smart meters on your account:
@@ -69,6 +74,10 @@ The usage and cost sensors will still show the previous day's data until shortly
 The standing charge and rate sensors are disabled by default as they are less commonly used. Before enabling them, ensure the data is visible in the Bright app.
 
 If the data being shown is wrong, check the Bright app first. If it is also wrong there, you will need to contact your supplier and tell them to fix the data being provided to DCC Other Users, as Bright is one of these.
+
+## Integration Settings
+
+Once the integration is running, there is an options (settings 'cog') next to the 'Hildebrand Glow (DCC)' Hub - this lets you change the frequency at which the integration pulls the data.  Values less than five minutes are not allowed.
 
 ## Energy Management
 
