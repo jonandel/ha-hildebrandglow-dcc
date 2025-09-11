@@ -83,7 +83,7 @@ class TariffCoordinator(DataUpdateCoordinator):
         super().__init__(
             hass,
             _LOGGER,
-            name=f"Tariff Data {resource.classifier}",  # More specific name for logging
+            name=f"Tariff Data {resource.classifier}",
             update_interval=timedelta(minutes=tariff_interval),
         )
         self.resource = resource
@@ -96,15 +96,13 @@ class TariffCoordinator(DataUpdateCoordinator):
         try:
             tariff = await tariff_data(self.hass, self.resource)
             if tariff is None:
-                # If tariff_data returns None, it means no data was successfully fetched.
-                # Raise UpdateFailed to mark coordinator unavailable and propagate to sensors.
                 raise UpdateFailed(
                     f"No tariff data received for {self.resource.classifier}"
                 )
             return tariff
         except (
             Exception
-        ) as ex:  # Catch any exceptions that might have been re-raised or not caught by tariff_data
+        ) as ex:
             _LOGGER.exception(
                 "Error fetching tariff data for %s: %s", self.resource.classifier, ex
             )
@@ -112,6 +110,18 @@ class TariffCoordinator(DataUpdateCoordinator):
 
 
 # --- HELPER FUNCTIONS ---
+
+
+async def _delayed_first_refresh(coordinator, delay):
+    """Delayed first refresh to avoid rate limit issues."""
+    _LOGGER.debug(
+        "Waiting %s seconds for initial refresh of %s", delay, coordinator.name
+    )
+    await asyncio.sleep(delay)
+    await coordinator.async_request_refresh()
+    _LOGGER.debug(
+        "Initial refresh of %s completed after delay", coordinator.name
+    )
 
 
 def supply_type(resource) -> str:
@@ -127,7 +137,6 @@ def supply_type(resource) -> str:
 def device_name(resource, virtual_entity) -> str:
     """Return device name. Includes name of virtual entity if it exists."""
     supply = supply_type(resource)
-    # First letter of device name should be capitalised
     if virtual_entity.name is not None:
         name = f"{virtual_entity.name} smart {supply} meter"
     else:
@@ -138,14 +147,10 @@ def device_name(resource, virtual_entity) -> str:
 async def daily_data(hass: HomeAssistant, resource) -> float:
     """Get Summ for the day from the API."""
     _LOGGER.debug("Fetching today's data")
-    # Get the current time in UTC (as thats what HA and the API use)
     now = dt_util.utcnow()
-    # Note: offset is how many minutes behind UTC we are.
-    # define the number of minutes to request the data offset, as described in the API for data, to account for differences to UTC
     utc_offset = -int(dt_util.now().utcoffset().total_seconds() / 60)
     _LOGGER.debug("UTC offset is: %s", utc_offset)
 
-    # Tell Hildebrand to pull latest DCC data
     try:
         await hass.async_add_executor_job(resource.catchup)
         _LOGGER.debug(
@@ -156,19 +161,16 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
         _LOGGER.error("Timeout: %s", ex)
     except ConnectionError as ex:
         _LOGGER.error("Cannot connect: %s", ex)
-    except Exception as ex:  # pylint: disable=broad-except
+    except Exception as ex:
         if "Request failed" in str(ex):
             _LOGGER.warning(
                 "Non-200 Status Code. The Glow API may be experiencing issues."
             )
         else:
             _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
-    # Round to the day to set time to 00:00:00, but taking off the UTC offset if there is one.
-    # Use this strategy, to get the last hour(s) before midnight as well, as our day starts utc_offset from UTC
     t_from = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(
         minutes=utc_offset
     )
-    # Round the now (in UTC) to the minute
     t_to = now.replace(second=0, microsecond=0)
 
     try:
@@ -186,7 +188,7 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
         _LOGGER.debug(
             "Readings for %s has %s entries", resource.classifier, len(readings)
         )
-        if not readings:  # Check if we get zero return values
+        if not readings:
             _LOGGER.debug("nothing returned")
         else:
             v = readings[0][1].value
@@ -204,7 +206,6 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
                     readings[1][0],
                     readings[1][1].value,
                 )
-            # only return a value, if one or more values came back from the API.
             return v
     except Timeout as ex:
         _LOGGER.error("Timeout: %s", ex)
@@ -222,7 +223,7 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
 
 async def tariff_data(
     hass: HomeAssistant, resource
-):  # Removed -> float hint; it returns an object
+):
     """Get tariff data from the API."""
     try:
         tariff = await hass.async_add_executor_job(resource.get_tariff)
@@ -232,26 +233,24 @@ async def tariff_data(
         )
         return tariff
     except UnboundLocalError:
-        # This occurs if resource.get_tariff() fails before 'tariff' is assigned.
-        # It usually means the underlying library had an issue getting the tariff.
         supply = supply_type(resource)
         _LOGGER.warning(
             "No tariff data found for %s meter (id: %s). If you don't see tariff data for this meter in the Bright app, please disable the associated rate and standing charge sensors",
             supply,
             resource.id,
         )
-        return None  # Explicitly return None on this specific condition
+        return None
     except Timeout as ex:
         _LOGGER.error(
             "Timeout fetching tariff data for %s: %s", resource.classifier, ex
         )
-        return None  # Let coordinator handle UpdateFailed
+        return None
     except ConnectionError as ex:
         _LOGGER.error(
             "Connection error fetching tariff data for %s: %s", resource.classifier, ex
         )
-        return None  # Let coordinator handle UpdateFailed
-    except Exception as ex:  # pylint: disable=broad-except
+        return None
+    except Exception as ex:
         if "Request failed" in str(ex):
             _LOGGER.warning(
                 "Non-200 Status Code. The Glow API may be experiencing issues for tariff %s: %s",
@@ -265,16 +264,6 @@ async def tariff_data(
                 ex,
             )
         return None
-
-
-async def _delayed_first_refresh(coordinator: DataUpdateCoordinator, delay: int = 5):
-    """Perform first refresh after a delay."""
-    _LOGGER.debug(
-        "Scheduling delayed first refresh for %s in %d seconds", coordinator.name, delay
-    )
-    await asyncio.sleep(delay)
-    await coordinator.async_request_refresh()
-    _LOGGER.debug("Completed delayed first refresh for %s", coordinator.name)
 
 
 # --- SENSOR BASE CLASS ---
@@ -374,14 +363,8 @@ class Cost(GlowDCCSensor):
         self._attr_native_value = round(data / 100, 2)
 
 
-class Standing(CoordinatorEntity, SensorEntity):  # Standing and Rate were moved up
-    """An entity using CoordinatorEntity.
-    The CoordinatorEntity class provides:
-      should_poll
-      async_update
-      async_added_to_hass
-      available
-    """
+class Standing(CoordinatorEntity, SensorEntity):
+    """An entity using CoordinatorEntity."""
 
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_has_entity_name = True
@@ -424,14 +407,8 @@ class Standing(CoordinatorEntity, SensorEntity):  # Standing and Rate were moved
         )
 
 
-class Rate(CoordinatorEntity, SensorEntity):  # Standing and Rate were moved up
-    """An entity using CoordinatorEntity.
-    The CoordinatorEntity class provides:
-      should_poll
-      async_update
-      async_added_to_hass
-      available
-    """
+class Rate(CoordinatorEntity, SensorEntity):
+    """An entity using CoordinatorEntity."""
 
     _attr_device_class = None
     _attr_has_entity_name = True
@@ -485,8 +462,8 @@ async def async_setup_entry(
     tariff_coordinators: dict[str, TariffCoordinator] = {}
 
     glowmarkt = hass.data[DOMAIN][entry.entry_id]["client"]
-    daily_interval = entry.data.get(CONF_DAILY_INTERVAL)
-    tariff_interval = entry.data.get(CONF_TARIFF_INTERVAL)
+    daily_interval = hass.data[DOMAIN][entry.entry_id][CONF_DAILY_INTERVAL]
+    tariff_interval = hass.data[DOMAIN][entry.entry_id][CONF_TARIFF_INTERVAL]
 
     virtual_entities: dict = {}
     try:
