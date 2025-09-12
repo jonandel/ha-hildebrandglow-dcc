@@ -44,8 +44,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Set API object and config options, using options flow values if they exist
     hass.data[DOMAIN][entry.entry_id] = {
         "client": glowmarkt,
-        CONF_DAILY_INTERVAL: entry.options.get(CONF_DAILY_INTERVAL, entry.data.get(CONF_DAILY_INTERVAL, 15)),
-        CONF_TARIFF_INTERVAL: entry.options.get(CONF_TARIFF_INTERVAL, entry.data.get(CONF_TARIFF_INTERVAL, 60)),
+        CONF_DAILY_INTERVAL: entry.options.get(
+            CONF_DAILY_INTERVAL, entry.data.get(CONF_DAILY_INTERVAL, 15)
+        ),
+        CONF_TARIFF_INTERVAL: entry.options.get(
+            CONF_TARIFF_INTERVAL, entry.data.get(CONF_TARIFF_INTERVAL, 60)
+        ),
     }
     _LOGGER.debug(
         "API object and config stored in hass.data. Forwarding setup to platforms..."
