@@ -100,9 +100,7 @@ class TariffCoordinator(DataUpdateCoordinator):
                     f"No tariff data received for {self.resource.classifier}"
                 )
             return tariff
-        except (
-            Exception
-        ) as ex:
+        except Exception as ex:
             _LOGGER.exception(
                 "Error fetching tariff data for %s: %s", self.resource.classifier, ex
             )
@@ -119,9 +117,7 @@ async def _delayed_first_refresh(coordinator, delay):
     )
     await asyncio.sleep(delay)
     await coordinator.async_request_refresh()
-    _LOGGER.debug(
-        "Initial refresh of %s completed after delay", coordinator.name
-    )
+    _LOGGER.debug("Initial refresh of %s completed after delay", coordinator.name)
 
 
 def supply_type(resource) -> str:
@@ -221,9 +217,7 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
     return None
 
 
-async def tariff_data(
-    hass: HomeAssistant, resource
-):
+async def tariff_data(hass: HomeAssistant, resource):
     """Get tariff data from the API."""
     try:
         tariff = await hass.async_add_executor_job(resource.get_tariff)
