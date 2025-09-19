@@ -54,10 +54,10 @@ class DataCoordinator(DataUpdateCoordinator):
         )
         try:
             value = await daily_data(self.hass, self.resource)
+            # If value is None, do not raise an exception,
+            # which allows the coordinator to keep its previous state.
             if value is None:
-                raise UpdateFailed(
-                    f"No daily data received for {self.resource.classifier}"
-                )
+                return None
             return value
         except Timeout as ex:
             raise UpdateFailed(f"Timeout fetching daily data: {ex}") from ex
@@ -96,11 +96,15 @@ class TariffCoordinator(DataUpdateCoordinator):
         try:
             tariff = await tariff_data(self.hass, self.resource)
             if tariff is None:
+                # If tariff_data returns None, it means no data was successfully fetched.
+                # Raise UpdateFailed to mark coordinator unavailable and propagate to sensors.
                 raise UpdateFailed(
                     f"No tariff data received for {self.resource.classifier}"
                 )
             return tariff
-        except Exception as ex:
+        except (
+            Exception
+        ) as ex:
             _LOGGER.exception(
                 "Error fetching tariff data for %s: %s", self.resource.classifier, ex
             )
@@ -108,16 +112,6 @@ class TariffCoordinator(DataUpdateCoordinator):
 
 
 # --- HELPER FUNCTIONS ---
-
-
-async def _delayed_first_refresh(coordinator, delay):
-    """Delayed first refresh to avoid rate limit issues."""
-    _LOGGER.debug(
-        "Waiting %s seconds for initial refresh of %s", delay, coordinator.name
-    )
-    await asyncio.sleep(delay)
-    await coordinator.async_request_refresh()
-    _LOGGER.debug("Initial refresh of %s completed after delay", coordinator.name)
 
 
 def supply_type(resource) -> str:
@@ -157,7 +151,7 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
         _LOGGER.error("Timeout: %s", ex)
     except ConnectionError as ex:
         _LOGGER.error("Cannot connect: %s", ex)
-    except Exception as ex:
+    except Exception as ex:  # pylint: disable=broad-except
         if "Request failed" in str(ex):
             _LOGGER.warning(
                 "Non-200 Status Code. The Glow API may be experiencing issues."
@@ -217,7 +211,9 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
     return None
 
 
-async def tariff_data(hass: HomeAssistant, resource):
+async def tariff_data(
+    hass: HomeAssistant, resource
+):
     """Get tariff data from the API."""
     try:
         tariff = await hass.async_add_executor_job(resource.get_tariff)
@@ -258,6 +254,16 @@ async def tariff_data(hass: HomeAssistant, resource):
                 ex,
             )
         return None
+
+
+async def _delayed_first_refresh(coordinator: DataUpdateCoordinator, delay: int = 5):
+    """Perform first refresh after a delay."""
+    _LOGGER.debug(
+        "Scheduling delayed first refresh for %s in %d seconds", coordinator.name, delay
+    )
+    await asyncio.sleep(delay)
+    await coordinator.async_request_refresh()
+    _LOGGER.debug("Completed delayed first refresh for %s", coordinator.name)
 
 
 # --- SENSOR BASE CLASS ---
@@ -456,8 +462,9 @@ async def async_setup_entry(
     tariff_coordinators: dict[str, TariffCoordinator] = {}
 
     glowmarkt = hass.data[DOMAIN][entry.entry_id]["client"]
-    daily_interval = hass.data[DOMAIN][entry.entry_id][CONF_DAILY_INTERVAL]
-    tariff_interval = hass.data[DOMAIN][entry.entry_id][CONF_TARIFF_INTERVAL]
+    # Get the daily and tariff intervals from the stored data, with a fallback default.
+    daily_interval = hass.data[DOMAIN][entry.entry_id].get(CONF_DAILY_INTERVAL, 15)
+    tariff_interval = hass.data[DOMAIN][entry.entry_id].get(CONF_TARIFF_INTERVAL, 60)
 
     virtual_entities: dict = {}
     try:
