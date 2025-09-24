@@ -7,10 +7,9 @@ import asyncio
 from collections.abc import Callable
 from datetime import datetime, time, timedelta
 import logging
-from typing import Any
 
 import requests
-from requests.exceptions import ConnectionError, Timeout
+from requests.exceptions import ConnectionError, Timeout, HTTPError
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -44,7 +43,7 @@ class DataCoordinator(DataUpdateCoordinator):
         super().__init__(
             hass,
             _LOGGER,
-            name=f"Daily Data {glowmarkt_resource.classifier} ({glowmarkt_resource.id})",
+            name=f"Daily Data {glowmarkt_resource.classifier}",
             update_interval=timedelta(minutes=daily_interval),
         )
 
@@ -60,19 +59,14 @@ class DataCoordinator(DataUpdateCoordinator):
             if value is None:
                 return None
             return value
+        except HTTPError as ex:
+            raise UpdateFailed(f"HTTP Error fetching daily data: {ex}, Status Code: {ex.response.status_code}") from ex
         except Timeout as ex:
             raise UpdateFailed(f"Timeout fetching daily data: {ex}") from ex
         except ConnectionError as ex:
             raise UpdateFailed(f"Connection error fetching daily data: {ex}") from ex
         except Exception as ex:
-            if "Request failed" in str(ex):
-                _LOGGER.warning(
-                    "Non-200 Status Code fetching daily data. The Glow API may be experiencing issues for %s: %s",
-                    self.resource.classifier,
-                    ex,
-                )
-            else:
-                _LOGGER.exception("Unexpected exception fetching daily data: %s", ex)
+            _LOGGER.exception("Unexpected exception fetching daily data: %s", ex)
             raise UpdateFailed(f"Unknown error fetching daily data: {ex}") from ex
 
 
@@ -84,7 +78,7 @@ class TariffCoordinator(DataUpdateCoordinator):
         super().__init__(
             hass,
             _LOGGER,
-            name=f"Tariff Data {resource.classifier} ({resource.id})",
+            name=f"Tariff Data {resource.classifier}",
             update_interval=timedelta(minutes=tariff_interval),
         )
         self.resource = resource
@@ -103,6 +97,11 @@ class TariffCoordinator(DataUpdateCoordinator):
                     f"No tariff data received for {self.resource.classifier}"
                 )
             return tariff
+        except HTTPError as ex:
+            _LOGGER.error(
+                "HTTP Error fetching tariff data for %s: %s, Status Code: %s", self.resource.classifier, ex, ex.response.status_code
+            )
+            raise UpdateFailed(f"Failed to fetch tariff data: {ex}") from ex
         except Exception as ex:
             _LOGGER.exception(
                 "Error fetching tariff data for %s: %s", self.resource.classifier, ex
@@ -146,17 +145,14 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
             "Successful GET to https://api.glowmarkt.com/api/v0-1/resource/%s/catchup",
             resource.id,
         )
+    except HTTPError as ex:
+        _LOGGER.error("HTTP Error: %s, Status Code: %s", ex, ex.response.status_code)
     except Timeout as ex:
         _LOGGER.error("Timeout: %s", ex)
     except ConnectionError as ex:
         _LOGGER.error("Cannot connect: %s", ex)
     except Exception as ex:  # pylint: disable=broad-except
-        if "Request failed" in str(ex):
-            _LOGGER.warning(
-                "Non-200 Status Code. The Glow API may be experiencing issues."
-            )
-        else:
-            _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
+        _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
     t_from = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(
         minutes=utc_offset
     )
@@ -196,18 +192,20 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
                     readings[1][1].value,
                 )
             return v
+    except HTTPError as ex:
+        _LOGGER.error(
+            "HTTP Error fetching daily data: %s, Status Code: %s", ex, ex.response.status_code
+        )
+        return None
     except Timeout as ex:
         _LOGGER.error("Timeout: %s", ex)
+        return None
     except ConnectionError as ex:
         _LOGGER.error("Cannot connect: %s", ex)
+        return None
     except Exception as ex:
-        if "Request failed" in str(ex):
-            _LOGGER.warning(
-                "Non-200 Status Code. The Glow API may be experiencing issues"
-            )
-        else:
-            _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
-    return None
+        _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
+        return None
 
 
 async def tariff_data(hass: HomeAssistant, resource):
@@ -227,6 +225,11 @@ async def tariff_data(hass: HomeAssistant, resource):
             resource.id,
         )
         return None
+    except HTTPError as ex:
+        _LOGGER.error(
+            "HTTP Error fetching tariff data for %s: %s, Status Code: %s", resource.classifier, ex, ex.response.status_code
+        )
+        return None
     except Timeout as ex:
         _LOGGER.error(
             "Timeout fetching tariff data for %s: %s", resource.classifier, ex
@@ -238,18 +241,11 @@ async def tariff_data(hass: HomeAssistant, resource):
         )
         return None
     except Exception as ex:
-        if "Request failed" in str(ex):
-            _LOGGER.warning(
-                "Non-200 Status Code. The Glow API may be experiencing issues for tariff %s: %s",
-                resource.classifier,
-                ex,
-            )
-        else:
-            _LOGGER.exception(
-                "Unexpected exception fetching tariff data for %s: %s. Please open an issue",
-                resource.classifier,
-                ex,
-            )
+        _LOGGER.exception(
+            "Unexpected exception fetching tariff data for %s: %s. Please open an issue",
+            resource.classifier,
+            ex,
+        )
         return None
 
 
@@ -447,6 +443,7 @@ class Rate(CoordinatorEntity, SensorEntity):
 
 # --- ASYNC SETUP ENTRY FUNCTION ---
 
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: Callable
 ) -> bool:
@@ -469,16 +466,16 @@ async def async_setup_entry(
             glowmarkt.get_virtual_entities
         )
         _LOGGER.debug("Successful GET to %svirtualentity", glowmarkt.url)
+    except HTTPError as ex:
+        _LOGGER.error(
+            "HTTP Error fetching virtual entities: Status Code %s - %s", ex.response.status_code, ex
+        )
+        return False
     except (Timeout, ConnectionError) as ex:
         _LOGGER.error("Failed to get virtual entities: %s", ex)
         return False
     except Exception as ex:
-        if "Request failed" in str(ex):
-            _LOGGER.error(
-                "Non-200 Status Code. The Glow API may be experiencing issues"
-            )
-        else:
-            _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
+        _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
         return False
 
     for virtual_entity in virtual_entities:
@@ -494,16 +491,16 @@ async def async_setup_entry(
                 glowmarkt.url,
                 virtual_entity.id,
             )
+        except HTTPError as ex:
+            _LOGGER.error(
+                "HTTP Error fetching resources for %s: Status Code %s - %s", virtual_entity.name, ex.response.status_code, ex
+            )
+            continue
         except (Timeout, ConnectionError) as ex:
             _LOGGER.error("Failed to get resources: %s", ex)
             continue
         except Exception as ex:
-            if "Request failed" in str(ex):
-                _LOGGER.error(
-                    "Non-200 Status Code. The Glow API may be experiencing issues"
-                )
-            else:
-                _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
+            _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
             continue
 
         for resource in resources:
