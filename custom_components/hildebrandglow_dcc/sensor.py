@@ -9,7 +9,7 @@ from datetime import datetime, time, timedelta
 import logging
 
 import requests
-from requests.exceptions import ConnectionError, Timeout, HTTPError
+from requests.exceptions import ConnectionError, HTTPError, Timeout
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -60,7 +60,9 @@ class DataCoordinator(DataUpdateCoordinator):
                 return None
             return value
         except HTTPError as ex:
-            raise UpdateFailed(f"HTTP Error fetching daily data: {ex}, Status Code: {ex.response.status_code}") from ex
+            raise UpdateFailed(
+                f"HTTP Error fetching daily data: {ex}, Status Code: {ex.response.status_code}"
+            ) from ex
         except Timeout as ex:
             raise UpdateFailed(f"Timeout fetching daily data: {ex}") from ex
         except ConnectionError as ex:
@@ -99,7 +101,10 @@ class TariffCoordinator(DataUpdateCoordinator):
             return tariff
         except HTTPError as ex:
             _LOGGER.error(
-                "HTTP Error fetching tariff data for %s: %s, Status Code: %s", self.resource.classifier, ex, ex.response.status_code
+                "HTTP Error fetching tariff data for %s: %s, Status Code: %s",
+                self.resource.classifier,
+                ex,
+                ex.response.status_code,
             )
             raise UpdateFailed(f"Failed to fetch tariff data: {ex}") from ex
         except Exception as ex:
@@ -194,7 +199,9 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
             return v
     except HTTPError as ex:
         _LOGGER.error(
-            "HTTP Error fetching daily data: %s, Status Code: %s", ex, ex.response.status_code
+            "HTTP Error fetching daily data: %s, Status Code: %s",
+            ex,
+            ex.response.status_code,
         )
         return None
     except Timeout as ex:
@@ -227,7 +234,10 @@ async def tariff_data(hass: HomeAssistant, resource):
         return None
     except HTTPError as ex:
         _LOGGER.error(
-            "HTTP Error fetching tariff data for %s: %s, Status Code: %s", resource.classifier, ex, ex.response.status_code
+            "HTTP Error fetching tariff data for %s: %s, Status Code: %s",
+            resource.classifier,
+            ex,
+            ex.response.status_code,
         )
         return None
     except Timeout as ex:
@@ -468,7 +478,9 @@ async def async_setup_entry(
         _LOGGER.debug("Successful GET to %svirtualentity", glowmarkt.url)
     except HTTPError as ex:
         _LOGGER.error(
-            "HTTP Error fetching virtual entities: Status Code %s - %s", ex.response.status_code, ex
+            "HTTP Error fetching virtual entities: Status Code %s - %s",
+            ex.response.status_code,
+            ex,
         )
         return False
     except (Timeout, ConnectionError) as ex:
@@ -493,7 +505,10 @@ async def async_setup_entry(
             )
         except HTTPError as ex:
             _LOGGER.error(
-                "HTTP Error fetching resources for %s: Status Code %s - %s", virtual_entity.name, ex.response.status_code, ex
+                "HTTP Error fetching resources for %s: Status Code %s - %s",
+                virtual_entity.name,
+                ex.response.status_code,
+                ex,
             )
             continue
         except (Timeout, ConnectionError) as ex:
@@ -515,9 +530,7 @@ async def async_setup_entry(
                     )
                     # Schedule delayed first refresh instead of immediate call
                     hass.async_create_task(
-                        _delayed_first_refresh(
-                            daily_coordinators[coordinator_key], 5
-                        )
+                        _delayed_first_refresh(daily_coordinators[coordinator_key], 5)
                     )
 
                 usage_sensor = Usage(
@@ -535,9 +548,7 @@ async def async_setup_entry(
                     )
                     # Schedule delayed first refresh instead of immediate call
                     hass.async_create_task(
-                        _delayed_first_refresh(
-                            tariff_coordinators[coordinator_key], 5
-                        )
+                        _delayed_first_refresh(tariff_coordinators[coordinator_key], 5)
                     )
 
                 standing_sensor = Standing(
@@ -565,9 +576,7 @@ async def async_setup_entry(
                     )
                     # Schedule delayed first refresh instead of immediate call
                     hass.async_create_task(
-                        _delayed_first_refresh(
-                            daily_coordinators[coordinator_key], 5
-                        )
+                        _delayed_first_refresh(daily_coordinators[coordinator_key], 5)
                     )
 
                 cost_sensor = Cost(
@@ -584,9 +593,7 @@ async def async_setup_entry(
                     )
                     # Schedule delayed first refresh instead of immediate call
                     hass.async_create_task(
-                        _delayed_first_refresh(
-                            daily_coordinators[coordinator_key], 5
-                        )
+                        _delayed_first_refresh(daily_coordinators[coordinator_key], 5)
                     )
 
                 cost_sensor = Cost(
