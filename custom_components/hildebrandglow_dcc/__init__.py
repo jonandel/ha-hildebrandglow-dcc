@@ -29,6 +29,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         glowmarkt = await hass.async_add_executor_job(
             BrightClient, entry.data["username"], entry.data["password"]
         )
+    except requests.exceptions.HTTPError as ex:
+        _LOGGER.error("HTTP error during API authentication: Status Code %s - %s", ex.response.status_code, ex)
+        raise ConfigEntryNotReady(f"HTTP Error: {ex.response.status_code}") from ex
     except requests.Timeout as ex:
         _LOGGER.error("Timeout during API authentication: %s", ex)
         raise ConfigEntryNotReady(f"Timeout: {ex}") from ex
