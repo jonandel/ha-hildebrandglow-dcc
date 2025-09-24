@@ -447,6 +447,7 @@ class Rate(CoordinatorEntity, SensorEntity):
 
 # --- ASYNC SETUP ENTRY FUNCTION ---
 
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: Callable
 ) -> bool:
@@ -518,9 +519,7 @@ async def async_setup_entry(
                     )
                     # Schedule delayed first refresh instead of immediate call
                     hass.async_create_task(
-                        _delayed_first_refresh(
-                            daily_coordinators[coordinator_key], 5
-                        )
+                        _delayed_first_refresh(daily_coordinators[coordinator_key], 5)
                     )
 
                 usage_sensor = Usage(
@@ -538,9 +537,7 @@ async def async_setup_entry(
                     )
                     # Schedule delayed first refresh instead of immediate call
                     hass.async_create_task(
-                        _delayed_first_refresh(
-                            tariff_coordinators[coordinator_key], 5
-                        )
+                        _delayed_first_refresh(tariff_coordinators[coordinator_key], 5)
                     )
 
                 standing_sensor = Standing(
@@ -568,9 +565,7 @@ async def async_setup_entry(
                     )
                     # Schedule delayed first refresh instead of immediate call
                     hass.async_create_task(
-                        _delayed_first_refresh(
-                            daily_coordinators[coordinator_key], 5
-                        )
+                        _delayed_first_refresh(daily_coordinators[coordinator_key], 5)
                     )
 
                 cost_sensor = Cost(
@@ -587,9 +582,7 @@ async def async_setup_entry(
                     )
                     # Schedule delayed first refresh instead of immediate call
                     hass.async_create_task(
-                        _delayed_first_refresh(
-                            daily_coordinators[coordinator_key], 5
-                        )
+                        _delayed_first_refresh(daily_coordinators[coordinator_key], 5)
                     )
 
                 cost_sensor = Cost(
