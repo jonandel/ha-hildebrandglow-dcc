@@ -7,6 +7,7 @@ import asyncio
 from collections.abc import Callable
 from datetime import datetime, time, timedelta
 import logging
+from typing import Any
 
 import requests
 from requests.exceptions import ConnectionError, Timeout
@@ -43,7 +44,7 @@ class DataCoordinator(DataUpdateCoordinator):
         super().__init__(
             hass,
             _LOGGER,
-            name=f"Daily Data {glowmarkt_resource.classifier}",
+            name=f"Daily Data {glowmarkt_resource.classifier} ({glowmarkt_resource.id})",
             update_interval=timedelta(minutes=daily_interval),
         )
 
@@ -83,7 +84,7 @@ class TariffCoordinator(DataUpdateCoordinator):
         super().__init__(
             hass,
             _LOGGER,
-            name=f"Tariff Data {resource.classifier}",
+            name=f"Tariff Data {resource.classifier} ({resource.id})",
             update_interval=timedelta(minutes=tariff_interval),
         )
         self.resource = resource
@@ -446,7 +447,6 @@ class Rate(CoordinatorEntity, SensorEntity):
 
 # --- ASYNC SETUP ENTRY FUNCTION ---
 
-
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: Callable
 ) -> bool:
@@ -511,19 +511,20 @@ async def async_setup_entry(
                 "Processing resource with classifier: %s", resource.classifier
             )
             if resource.classifier in ["electricity.consumption", "gas.consumption"]:
-                if resource.classifier not in daily_coordinators:
-                    daily_coordinators[resource.classifier] = DataCoordinator(
+                coordinator_key = f"{virtual_entity.id}_{resource.classifier}"
+                if coordinator_key not in daily_coordinators:
+                    daily_coordinators[coordinator_key] = DataCoordinator(
                         hass, resource, daily_interval
                     )
                     # Schedule delayed first refresh instead of immediate call
                     hass.async_create_task(
                         _delayed_first_refresh(
-                            daily_coordinators[resource.classifier], 5
+                            daily_coordinators[coordinator_key], 5
                         )
                     )
 
                 usage_sensor = Usage(
-                    daily_coordinators[resource.classifier], resource, virtual_entity
+                    daily_coordinators[coordinator_key], resource, virtual_entity
                 )
                 entities.append(usage_sensor)
                 meters[resource.classifier] = usage_sensor
@@ -531,19 +532,19 @@ async def async_setup_entry(
                     "Added Usage sensor to list for entity %s", resource.classifier
                 )
 
-                if resource.classifier not in tariff_coordinators:
-                    tariff_coordinators[resource.classifier] = TariffCoordinator(
+                if coordinator_key not in tariff_coordinators:
+                    tariff_coordinators[coordinator_key] = TariffCoordinator(
                         hass, resource, tariff_interval
                     )
                     # Schedule delayed first refresh instead of immediate call
                     hass.async_create_task(
                         _delayed_first_refresh(
-                            tariff_coordinators[resource.classifier], 5
+                            tariff_coordinators[coordinator_key], 5
                         )
                     )
 
                 standing_sensor = Standing(
-                    tariff_coordinators[resource.classifier], resource, virtual_entity
+                    tariff_coordinators[coordinator_key], resource, virtual_entity
                 )
                 entities.append(standing_sensor)
                 _LOGGER.debug(
@@ -551,7 +552,7 @@ async def async_setup_entry(
                 )
 
                 rate_sensor = Rate(
-                    tariff_coordinators[resource.classifier], resource, virtual_entity
+                    tariff_coordinators[coordinator_key], resource, virtual_entity
                 )
                 entities.append(rate_sensor)
                 _LOGGER.debug(
@@ -560,37 +561,39 @@ async def async_setup_entry(
 
         for resource in resources:
             if resource.classifier == "gas.consumption.cost":
-                if resource.classifier not in daily_coordinators:
-                    daily_coordinators[resource.classifier] = DataCoordinator(
+                coordinator_key = f"{virtual_entity.id}_{resource.classifier}"
+                if coordinator_key not in daily_coordinators:
+                    daily_coordinators[coordinator_key] = DataCoordinator(
                         hass, resource, daily_interval
                     )
                     # Schedule delayed first refresh instead of immediate call
                     hass.async_create_task(
                         _delayed_first_refresh(
-                            daily_coordinators[resource.classifier], 5
+                            daily_coordinators[coordinator_key], 5
                         )
                     )
 
                 cost_sensor = Cost(
-                    daily_coordinators[resource.classifier], resource, virtual_entity
+                    daily_coordinators[coordinator_key], resource, virtual_entity
                 )
                 cost_sensor.meter = meters["gas.consumption"]
                 entities.append(cost_sensor)
                 _LOGGER.debug("Added Gas Cost sensor to list.")
             elif resource.classifier == "electricity.consumption.cost":
-                if resource.classifier not in daily_coordinators:
-                    daily_coordinators[resource.classifier] = DataCoordinator(
+                coordinator_key = f"{virtual_entity.id}_{resource.classifier}"
+                if coordinator_key not in daily_coordinators:
+                    daily_coordinators[coordinator_key] = DataCoordinator(
                         hass, resource, daily_interval
                     )
                     # Schedule delayed first refresh instead of immediate call
                     hass.async_create_task(
                         _delayed_first_refresh(
-                            daily_coordinators[resource.classifier], 5
+                            daily_coordinators[coordinator_key], 5
                         )
                     )
 
                 cost_sensor = Cost(
-                    daily_coordinators[resource.classifier], resource, virtual_entity
+                    daily_coordinators[coordinator_key], resource, virtual_entity
                 )
                 cost_sensor.meter = meters["electricity.consumption"]
                 entities.append(cost_sensor)
