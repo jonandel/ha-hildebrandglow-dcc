@@ -49,11 +49,7 @@ Then, add the integration:
   Visit the <i>Integrations</i> section in Home Assistant and click the <i>Add</i> button in the bottom right corner. Search for <code>Hildebrand Glow (DCC)</code> and input your credentials. <b>You may need to clear your browser cache before the integration appears in the list.</b>
 </details>
 
-Once added, the integration will attempt to setup by taking your BRIGHT credentials, and two parameters on how frequently to update the sensors:
-- Daily_refresh: This is the usage data from your meter (ie readings) - is updated at most every 30 mins on the DCC
-- Tarrif_refresh: This is the daily standing charge, and tarrif data - Unless you are on a complex tarrif, this will be mainly static for days.
-  
-Please note: Do not set these parameters too frequently, as the data is only updated on the DCC (about) every 30 minutes or so.  If you set the 'refresh intervals' too high, you will overload the API, but will not obtain higher refresh rates in your Home Assistant.
+Once added, the integration will attempt to setup by taking your BRIGHT credentials, populating the device(s) and creating the sensors based upon what is configured in your account by Glow.
 
 ## Upgrading
 
@@ -66,18 +62,22 @@ Once you've authenticated, the integration will automatically set up the followi
 
 - Usage (Today) - Consumption today (kWh)
 - Cost (Today) - Total cost of today's consumption (GBP)
-- Standing Charge - Current standing charge (GBP)
-- Rate - Current tariff (GBP/kWh)
+- Standing Charge* - Current standing charge (GBP)
+- Rate - Current tariff* (GBP/kWh)
 
 The usage and cost sensors will still show the previous day's data until shortly after 01:00 to ensure that all of the previous day's data is collected.
 
-The standing charge and rate sensors are disabled by default as they are less commonly used. Before enabling them, ensure the data is visible in the Bright app.
+*The standing charge and rate sensors are disabled by default as they are less commonly used. Before enabling them, ensure the data is visible in the Bright app, or the Integration will cause errors.
 
 If the data being shown is wrong, check the Bright app first. If it is also wrong there, you will need to contact your supplier and tell them to fix the data being provided to DCC Other Users, as Bright is one of these.
 
 ## Integration Settings
 
 Once the integration is running, there is an options (settings 'cog') next to the 'Hildebrand Glow (DCC)' Hub - this lets you change the frequency at which the integration pulls the data.  Values less than five minutes are not allowed.
+- Daily_refresh: This is the usage data from your meter (ie readings) - is updated at most every 30 mins on the DCC
+- Tarrif_refresh: This is the daily standing charge, and tarrif data - Unless you are on a complex tarrif, this will be mainly static for days.
+  
+Please note: Do not set these parameters too frequently, as the data is only updated on the DCC (at very best) every 30 minutes or so.  If you set the 'refresh intervals' too high, you will overload the API, but will not obtain higher refresh rates in your Home Assistant.
 
 ## Energy Management
 
