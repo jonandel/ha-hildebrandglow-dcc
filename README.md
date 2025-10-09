@@ -56,14 +56,16 @@ Once added, the integration will attempt to setup by taking your BRIGHT credenti
 If upgrading from a an older version of this integration, e.g when pushed from HACS, you may need to delete the integration, and then re add it to update the configurations (which get cached).
 To do this, let HACS download the new version, and then restart Home Assistant (as HACS does for you).  Then in Settings/Integrations, open this Integration, and if there are errors reported, select 'Delete' from the three dots next to the 'Hildebrand Glow (DCC)' Hub. Then do a restart of Home Assistant.  Then go back into Integrations, and 'Add Integration' and add this integration again.  That will prompt HA to re-setup everything.
 
+If you are upgrading from a version before 1.4, or indeed from the original Integration Repo, then you will note the sensor names will be changed - this is due to the sensors now have the device name added, for those users that have more than one 'installation'.  Where the sensor names change, your old sensors will remain (but eventually be orphaned by Home Assistant onec they get 'stale').  You may have to investigate and adjust any historic use for example, if you wish to keep long term stats.
+
 ## Sensors
 
 Once you've authenticated, the integration will automatically set up the following sensors for each of the smart meters on your account:
 
 - Usage (Today) - Consumption today (kWh)
 - Cost (Today) - Total cost of today's consumption (GBP)
-- Standing Charge* - Current standing charge (GBP)
-- Rate - Current tariff* (GBP/kWh)
+- Standing Charge* - Current daily standing charge (GBP)
+- Rate* - Current tariff (GBP/kWh)
 
 The usage and cost sensors will still show the previous day's data until shortly after 01:00 to ensure that all of the previous day's data is collected.
 
