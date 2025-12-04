@@ -370,6 +370,7 @@ class Standing(CoordinatorEntity, SensorEntity):
     """An entity using CoordinatorEntity."""
 
     _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL
     _attr_has_entity_name = True
     _attr_name = "Standing charge"
     _attr_native_unit_of_measurement = "GBP"
@@ -413,7 +414,8 @@ class Standing(CoordinatorEntity, SensorEntity):
 class Rate(CoordinatorEntity, SensorEntity):
     """An entity using CoordinatorEntity."""
 
-    _attr_device_class = None
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL
     _attr_has_entity_name = True
     _attr_icon = "mdi:cash-multiple"
     _attr_name = "Rate"
