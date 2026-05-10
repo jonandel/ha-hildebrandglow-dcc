@@ -27,7 +27,15 @@ from homeassistant.helpers.update_coordinator import (
 )
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL, DOMAIN
+from .const import (
+    CONF_DAILY_INTERVAL,
+    CONF_TARIFF_INTERVAL,
+    DOMAIN,
+    ELEC_CONSUMPTION_CLASSIFIER,
+    ELEC_EXPORT_CLASSIFIER,
+    ELEC_EXPORT_REACTIVE_CLASSIFIER,
+    ELEC_IMPORT_REACTIVE_CLASSIFIER,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -119,6 +127,12 @@ class TariffCoordinator(DataUpdateCoordinator):
 
 def supply_type(resource) -> str:
     """Return supply type."""
+    if resource.classifier == ELEC_EXPORT_REACTIVE_CLASSIFIER:
+        return "electricity export reactive"
+    if resource.classifier == ELEC_IMPORT_REACTIVE_CLASSIFIER:
+        return "electricity import reactive"
+    if resource.classifier == ELEC_EXPORT_CLASSIFIER:
+        return "electricity export"
     if "electricity.consumption" in resource.classifier:
         return "electricity"
     if "gas.consumption" in resource.classifier:
@@ -319,7 +333,6 @@ class Usage(GlowDCCSensor):
     _attr_has_entity_name = True
     _attr_name = "Usage (today)"
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
 
     def __init__(
         self, coordinator: DataUpdateCoordinator, resource, virtual_entity
@@ -327,6 +340,12 @@ class Usage(GlowDCCSensor):
         """Initialize the sensor."""
         super().__init__(coordinator, resource, virtual_entity)
         self._attr_unique_id = f"{resource.id}_usage_today"
+        # Electricity from DCC can dip when exporting (net-style series); gas is
+        # typically monotonic intraday. total_increasing must never decrease.
+        if resource.classifier == ELEC_CONSUMPTION_CLASSIFIER:
+            self._attr_state_class = SensorStateClass.TOTAL
+        else:
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
         _LOGGER.debug("Created Usage sensor with unique_id: %s", self._attr_unique_id)
 
     @property
@@ -339,6 +358,69 @@ class Usage(GlowDCCSensor):
     @callback
     def _update_native_value(self, data: float) -> None:
         """Set the native value for usage sensor from coordinator data."""
+        self._attr_native_value = round(data, 2)
+
+
+class ExportUsage(GlowDCCSensor):
+    """Sensor for daily electricity exported to the grid (kWh)."""
+
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_has_entity_name = True
+    _attr_name = "Export (today)"
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:transmission-tower-export"
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, resource, virtual_entity
+    ) -> None:
+        """Initialize the export sensor."""
+        super().__init__(coordinator, resource, virtual_entity)
+        self._attr_unique_id = f"{resource.id}_export_today"
+        _LOGGER.debug(
+            "Created ExportUsage sensor with unique_id: %s", self._attr_unique_id
+        )
+
+    @callback
+    def _update_native_value(self, data: float) -> None:
+        """Set the native value from coordinator data."""
+        self._attr_native_value = round(data, 2)
+
+
+class ReactiveEnergyToday(GlowDCCSensor):
+    """Daily reactive energy from the DCC (typically kVArh)."""
+
+    _attr_device_class = None
+    _attr_has_entity_name = True
+    _attr_native_unit_of_measurement = "kVArh"
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, resource, virtual_entity
+    ) -> None:
+        """Initialize reactive import or export sensor."""
+        super().__init__(coordinator, resource, virtual_entity)
+        if resource.classifier == ELEC_IMPORT_REACTIVE_CLASSIFIER:
+            self._attr_name = "Reactive import (today)"
+            self._attr_unique_id = f"{resource.id}_reactive_import_today"
+            self._attr_icon = "mdi:sine-wave"
+        elif resource.classifier == ELEC_EXPORT_REACTIVE_CLASSIFIER:
+            self._attr_name = "Reactive export (today)"
+            self._attr_unique_id = f"{resource.id}_reactive_export_today"
+            self._attr_icon = "mdi:sine-wave"
+        else:
+            raise ValueError(
+                f"ReactiveEnergyToday unsupported classifier: {resource.classifier}"
+            )
+        _LOGGER.debug(
+            "Created ReactiveEnergyToday sensor with unique_id: %s",
+            self._attr_unique_id,
+        )
+
+    @callback
+    def _update_native_value(self, data: float) -> None:
+        """Set the native value from coordinator data."""
         self._attr_native_value = round(data, 2)
 
 
@@ -522,8 +604,26 @@ async def async_setup_entry(
             _LOGGER.debug(
                 "Processing resource with classifier: %s", resource.classifier
             )
-            if resource.classifier in ["electricity.consumption", "gas.consumption"]:
+            if resource.classifier in [
+                "electricity.consumption",
+                "gas.consumption",
+                ELEC_EXPORT_CLASSIFIER,
+                ELEC_IMPORT_REACTIVE_CLASSIFIER,
+                ELEC_EXPORT_REACTIVE_CLASSIFIER,
+            ]:
                 coordinator_key = f"{virtual_entity.id}_{resource.classifier}"
+                if resource.classifier == ELEC_EXPORT_CLASSIFIER:
+                    coordinator_key = (
+                        f"{virtual_entity.id}_{resource.id}_{ELEC_EXPORT_CLASSIFIER}"
+                    )
+                elif resource.classifier in (
+                    ELEC_IMPORT_REACTIVE_CLASSIFIER,
+                    ELEC_EXPORT_REACTIVE_CLASSIFIER,
+                ):
+                    coordinator_key = (
+                        f"{virtual_entity.id}_{resource.id}_{resource.classifier}"
+                    )
+
                 if coordinator_key not in daily_coordinators:
                     daily_coordinators[coordinator_key] = DataCoordinator(
                         hass, resource, daily_interval
@@ -532,6 +632,31 @@ async def async_setup_entry(
                     hass.async_create_task(
                         _delayed_first_refresh(daily_coordinators[coordinator_key], 5)
                     )
+
+                if resource.classifier == ELEC_EXPORT_CLASSIFIER:
+                    export_sensor = ExportUsage(
+                        daily_coordinators[coordinator_key], resource, virtual_entity
+                    )
+                    entities.append(export_sensor)
+                    _LOGGER.debug(
+                        "Added ExportUsage sensor to list for entity %s",
+                        resource.classifier,
+                    )
+                    continue
+
+                if resource.classifier in (
+                    ELEC_IMPORT_REACTIVE_CLASSIFIER,
+                    ELEC_EXPORT_REACTIVE_CLASSIFIER,
+                ):
+                    reactive_sensor = ReactiveEnergyToday(
+                        daily_coordinators[coordinator_key], resource, virtual_entity
+                    )
+                    entities.append(reactive_sensor)
+                    _LOGGER.debug(
+                        "Added ReactiveEnergyToday sensor to list for entity %s",
+                        resource.classifier,
+                    )
+                    continue
 
                 usage_sensor = Usage(
                     daily_coordinators[coordinator_key], resource, virtual_entity
