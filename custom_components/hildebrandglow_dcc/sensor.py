@@ -27,7 +27,15 @@ from homeassistant.helpers.update_coordinator import (
 )
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL, DOMAIN
+from .const import (
+    CONF_DAILY_INTERVAL,
+    CONF_TARIFF_INTERVAL,
+    DOMAIN,
+    ELEC_CONSUMPTION_CLASSIFIER,
+    ELEC_EXPORT_CLASSIFIER,
+    ELEC_EXPORT_REACTIVE_CLASSIFIER,
+    ELEC_IMPORT_REACTIVE_CLASSIFIER,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -119,6 +127,12 @@ class TariffCoordinator(DataUpdateCoordinator):
 
 def supply_type(resource) -> str:
     """Return supply type."""
+    if resource.classifier == ELEC_EXPORT_REACTIVE_CLASSIFIER:
+        return "electricity export reactive"
+    if resource.classifier == ELEC_IMPORT_REACTIVE_CLASSIFIER:
+        return "electricity import reactive"
+    if resource.classifier == ELEC_EXPORT_CLASSIFIER:
+        return "electricity export"
     if "electricity.consumption" in resource.classifier:
         return "electricity"
     if "gas.consumption" in resource.classifier:
@@ -319,7 +333,6 @@ class Usage(GlowDCCSensor):
     _attr_has_entity_name = True
     _attr_name = "Usage (today)"
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
 
     def __init__(
         self, coordinator: DataUpdateCoordinator, resource, virtual_entity
@@ -327,6 +340,12 @@ class Usage(GlowDCCSensor):
         """Initialize the sensor."""
         super().__init__(coordinator, resource, virtual_entity)
         self._attr_unique_id = f"{resource.id}_usage_today"
+        # Electricity from DCC can dip when exporting (net-style series); gas is
+        # typically monotonic intraday. total_increasing must never decrease.
+        if resource.classifier == ELEC_CONSUMPTION_CLASSIFIER:
+            self._attr_state_class = SensorStateClass.TOTAL
+        else:
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
         _LOGGER.debug("Created Usage sensor with unique_id: %s", self._attr_unique_id)
 
     @property
@@ -339,6 +358,69 @@ class Usage(GlowDCCSensor):
     @callback
     def _update_native_value(self, data: float) -> None:
         """Set the native value for usage sensor from coordinator data."""
+        self._attr_native_value = round(data, 2)
+
+
+class ExportUsage(GlowDCCSensor):
+    """Sensor for daily electricity exported to the grid (kWh)."""
+
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_has_entity_name = True
+    _attr_name = "Export (today)"
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:transmission-tower-export"
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, resource, virtual_entity
+    ) -> None:
+        """Initialize the export sensor."""
+        super().__init__(coordinator, resource, virtual_entity)
+        self._attr_unique_id = f"{resource.id}_export_today"
+        _LOGGER.debug(
+            "Created ExportUsage sensor with unique_id: %s", self._attr_unique_id
+        )
+
+    @callback
+    def _update_native_value(self, data: float) -> None:
+        """Set the native value from coordinator data."""
+        self._attr_native_value = round(data, 2)
+
+
+class ReactiveEnergyToday(GlowDCCSensor):
+    """Daily reactive energy from the DCC (typically kVArh)."""
+
+    _attr_device_class = None
+    _attr_has_entity_name = True
+    _attr_native_unit_of_measurement = "kVArh"
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, resource, virtual_entity
+    ) -> None:
+        """Initialize reactive import or export sensor."""
+        super().__init__(coordinator, resource, virtual_entity)
+        if resource.classifier == ELEC_IMPORT_REACTIVE_CLASSIFIER:
+            self._attr_name = "Reactive import (today)"
+            self._attr_unique_id = f"{resource.id}_reactive_import_today"
+            self._attr_icon = "mdi:sine-wave"
+        elif resource.classifier == ELEC_EXPORT_REACTIVE_CLASSIFIER:
+            self._attr_name = "Reactive export (today)"
+            self._attr_unique_id = f"{resource.id}_reactive_export_today"
+            self._attr_icon = "mdi:sine-wave"
+        else:
+            raise ValueError(
+                f"ReactiveEnergyToday unsupported classifier: {resource.classifier}"
+            )
+        _LOGGER.debug(
+            "Created ReactiveEnergyToday sensor with unique_id: %s",
+            self._attr_unique_id,
+        )
+
+    @callback
+    def _update_native_value(self, data: float) -> None:
+        """Set the native value from coordinator data."""
         self._attr_native_value = round(data, 2)
 
 
@@ -451,6 +533,202 @@ class Rate(CoordinatorEntity, SensorEntity):
         )
 
 
+# --- ASYNC SETUP ENTRY HELPERS ---
+
+
+_PRIMARY_RESOURCE_CLASSIFIERS = frozenset(
+    {
+        "electricity.consumption",
+        "gas.consumption",
+        ELEC_EXPORT_CLASSIFIER,
+        ELEC_IMPORT_REACTIVE_CLASSIFIER,
+        ELEC_EXPORT_REACTIVE_CLASSIFIER,
+    }
+)
+
+
+class _GlowSensorSetupContext:
+    """Mutable state while building the sensor platform."""
+
+    __slots__ = (
+        "hass",
+        "daily_interval",
+        "tariff_interval",
+        "entities",
+        "meters",
+        "daily_coordinators",
+        "tariff_coordinators",
+    )
+
+    def __init__(
+        self, hass: HomeAssistant, daily_interval: int, tariff_interval: int
+    ) -> None:
+        self.hass = hass
+        self.daily_interval = daily_interval
+        self.tariff_interval = tariff_interval
+        self.entities: list = []
+        self.meters: dict = {}
+        self.daily_coordinators: dict[str, DataCoordinator] = {}
+        self.tariff_coordinators: dict[str, TariffCoordinator] = {}
+
+
+def _daily_resource_coordinator_key(virtual_entity, resource) -> str:
+    """Build stable coordinator key for daily data per resource/classifier."""
+    if resource.classifier == ELEC_EXPORT_CLASSIFIER:
+        return f"{virtual_entity.id}_{resource.id}_{ELEC_EXPORT_CLASSIFIER}"
+    if resource.classifier in (
+        ELEC_IMPORT_REACTIVE_CLASSIFIER,
+        ELEC_EXPORT_REACTIVE_CLASSIFIER,
+    ):
+        return f"{virtual_entity.id}_{resource.id}_{resource.classifier}"
+    return f"{virtual_entity.id}_{resource.classifier}"
+
+
+def _ensure_daily_coordinator(
+    ctx: _GlowSensorSetupContext, coordinator_key: str, resource
+) -> DataCoordinator:
+    """Return the daily DataCoordinator, creating it and scheduling refresh if needed."""
+    if coordinator_key not in ctx.daily_coordinators:
+        ctx.daily_coordinators[coordinator_key] = DataCoordinator(
+            ctx.hass, resource, ctx.daily_interval
+        )
+        ctx.hass.async_create_task(
+            _delayed_first_refresh(ctx.daily_coordinators[coordinator_key], 5)
+        )
+    return ctx.daily_coordinators[coordinator_key]
+
+
+def _ensure_tariff_coordinator(
+    ctx: _GlowSensorSetupContext, coordinator_key: str, resource
+) -> TariffCoordinator:
+    """Return the tariff TariffCoordinator, creating it and scheduling refresh if needed."""
+    if coordinator_key not in ctx.tariff_coordinators:
+        ctx.tariff_coordinators[coordinator_key] = TariffCoordinator(
+            ctx.hass, resource, ctx.tariff_interval
+        )
+        ctx.hass.async_create_task(
+            _delayed_first_refresh(ctx.tariff_coordinators[coordinator_key], 5)
+        )
+    return ctx.tariff_coordinators[coordinator_key]
+
+
+def _process_primary_resource(
+    ctx: _GlowSensorSetupContext, virtual_entity, resource
+) -> None:
+    """Register sensors for consumption, export, and reactive resources."""
+    if resource.classifier not in _PRIMARY_RESOURCE_CLASSIFIERS:
+        return
+
+    coordinator_key = _daily_resource_coordinator_key(virtual_entity, resource)
+    daily_coord = _ensure_daily_coordinator(ctx, coordinator_key, resource)
+
+    if resource.classifier == ELEC_EXPORT_CLASSIFIER:
+        ctx.entities.append(ExportUsage(daily_coord, resource, virtual_entity))
+        _LOGGER.debug(
+            "Added ExportUsage sensor to list for entity %s", resource.classifier
+        )
+        return
+
+    if resource.classifier in (
+        ELEC_IMPORT_REACTIVE_CLASSIFIER,
+        ELEC_EXPORT_REACTIVE_CLASSIFIER,
+    ):
+        ctx.entities.append(
+            ReactiveEnergyToday(daily_coord, resource, virtual_entity)
+        )
+        _LOGGER.debug(
+            "Added ReactiveEnergyToday sensor to list for entity %s",
+            resource.classifier,
+        )
+        return
+
+    usage_sensor = Usage(daily_coord, resource, virtual_entity)
+    ctx.entities.append(usage_sensor)
+    ctx.meters[resource.classifier] = usage_sensor
+    _LOGGER.debug("Added Usage sensor to list for entity %s", resource.classifier)
+
+    tariff_coord = _ensure_tariff_coordinator(ctx, coordinator_key, resource)
+    ctx.entities.append(Standing(tariff_coord, resource, virtual_entity))
+    _LOGGER.debug("Added Standing sensor to list for entity %s", resource.classifier)
+
+    ctx.entities.append(Rate(tariff_coord, resource, virtual_entity))
+    _LOGGER.debug("Added Rate sensor to list for entity %s", resource.classifier)
+
+
+def _append_cost_sensor(
+    ctx: _GlowSensorSetupContext,
+    virtual_entity,
+    resource,
+    *,
+    cost_classifier: str,
+    meter_classifier: str,
+    log_label: str,
+) -> None:
+    """Append a Cost sensor when resource matches the cost classifier."""
+    if resource.classifier != cost_classifier:
+        return
+
+    coordinator_key = f"{virtual_entity.id}_{resource.classifier}"
+    daily_coord = _ensure_daily_coordinator(ctx, coordinator_key, resource)
+    cost_sensor = Cost(daily_coord, resource, virtual_entity)
+    cost_sensor.meter = ctx.meters[meter_classifier]
+    ctx.entities.append(cost_sensor)
+    _LOGGER.debug("Added %s Cost sensor to list.", log_label)
+
+
+async def _async_fetch_virtual_entities(hass: HomeAssistant, glowmarkt):
+    """Return virtual entities from the API, or None on failure."""
+    try:
+        _LOGGER.debug("Fetching virtual entities from API...")
+        virtual_entities = await hass.async_add_executor_job(
+            glowmarkt.get_virtual_entities
+        )
+        _LOGGER.debug("Successful GET to %svirtualentity", glowmarkt.url)
+        return virtual_entities
+    except HTTPError as ex:
+        _LOGGER.error(
+            "HTTP Error fetching virtual entities: Status Code %s - %s",
+            ex.response.status_code,
+            ex,
+        )
+        return None
+    except (Timeout, ConnectionError) as ex:
+        _LOGGER.error("Failed to get virtual entities: %s", ex)
+        return None
+    except Exception as ex:
+        _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
+        return None
+
+
+async def _async_fetch_resources(hass: HomeAssistant, virtual_entity, glowmarkt):
+    """Return resources for a virtual entity, or None on failure."""
+    try:
+        _LOGGER.debug(
+            "Fetching resources for virtual entity %s...", virtual_entity.name
+        )
+        resources = await hass.async_add_executor_job(virtual_entity.get_resources)
+        _LOGGER.debug(
+            "Successful GET to %svirtualentity/%s/resources",
+            glowmarkt.url,
+            virtual_entity.id,
+        )
+        return resources
+    except HTTPError as ex:
+        _LOGGER.error(
+            "HTTP Error fetching resources for %s: Status Code %s - %s",
+            virtual_entity.name,
+            ex.response.status_code,
+            ex,
+        )
+        return None
+    except (Timeout, ConnectionError) as ex:
+        _LOGGER.error("Failed to get resources: %s", ex)
+        return None
+    except Exception as ex:
+        _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
+        return None
+
+
 # --- ASYNC SETUP ENTRY FUNCTION ---
 
 
@@ -459,152 +737,49 @@ async def async_setup_entry(
 ) -> bool:
     """Set up the sensor platform."""
     _LOGGER.debug("Starting async_setup_entry in sensor platform.")
-    entities: list = []
-    meters: dict = {}
-    daily_coordinators: dict[str, DataCoordinator] = {}
-    tariff_coordinators: dict[str, TariffCoordinator] = {}
 
     glowmarkt = hass.data[DOMAIN][entry.entry_id]["client"]
-    # Get the daily and tariff intervals from the stored data, with a fallback default.
     daily_interval = hass.data[DOMAIN][entry.entry_id].get(CONF_DAILY_INTERVAL, 15)
     tariff_interval = hass.data[DOMAIN][entry.entry_id].get(CONF_TARIFF_INTERVAL, 60)
 
-    virtual_entities: dict = {}
-    try:
-        _LOGGER.debug("Fetching virtual entities from API...")
-        virtual_entities = await hass.async_add_executor_job(
-            glowmarkt.get_virtual_entities
-        )
-        _LOGGER.debug("Successful GET to %svirtualentity", glowmarkt.url)
-    except HTTPError as ex:
-        _LOGGER.error(
-            "HTTP Error fetching virtual entities: Status Code %s - %s",
-            ex.response.status_code,
-            ex,
-        )
+    virtual_entities = await _async_fetch_virtual_entities(hass, glowmarkt)
+    if virtual_entities is None:
         return False
-    except (Timeout, ConnectionError) as ex:
-        _LOGGER.error("Failed to get virtual entities: %s", ex)
-        return False
-    except Exception as ex:
-        _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
-        return False
+
+    ctx = _GlowSensorSetupContext(hass, daily_interval, tariff_interval)
 
     for virtual_entity in virtual_entities:
         _LOGGER.debug("Found virtual entity: %s", virtual_entity.name)
-        resources: dict = {}
-        try:
-            _LOGGER.debug(
-                "Fetching resources for virtual entity %s...", virtual_entity.name
-            )
-            resources = await hass.async_add_executor_job(virtual_entity.get_resources)
-            _LOGGER.debug(
-                "Successful GET to %svirtualentity/%s/resources",
-                glowmarkt.url,
-                virtual_entity.id,
-            )
-        except HTTPError as ex:
-            _LOGGER.error(
-                "HTTP Error fetching resources for %s: Status Code %s - %s",
-                virtual_entity.name,
-                ex.response.status_code,
-                ex,
-            )
-            continue
-        except (Timeout, ConnectionError) as ex:
-            _LOGGER.error("Failed to get resources: %s", ex)
-            continue
-        except Exception as ex:
-            _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
+        resources = await _async_fetch_resources(hass, virtual_entity, glowmarkt)
+        if resources is None:
             continue
 
         for resource in resources:
             _LOGGER.debug(
                 "Processing resource with classifier: %s", resource.classifier
             )
-            if resource.classifier in ["electricity.consumption", "gas.consumption"]:
-                coordinator_key = f"{virtual_entity.id}_{resource.classifier}"
-                if coordinator_key not in daily_coordinators:
-                    daily_coordinators[coordinator_key] = DataCoordinator(
-                        hass, resource, daily_interval
-                    )
-                    # Schedule delayed first refresh instead of immediate call
-                    hass.async_create_task(
-                        _delayed_first_refresh(daily_coordinators[coordinator_key], 5)
-                    )
-
-                usage_sensor = Usage(
-                    daily_coordinators[coordinator_key], resource, virtual_entity
-                )
-                entities.append(usage_sensor)
-                meters[resource.classifier] = usage_sensor
-                _LOGGER.debug(
-                    "Added Usage sensor to list for entity %s", resource.classifier
-                )
-
-                if coordinator_key not in tariff_coordinators:
-                    tariff_coordinators[coordinator_key] = TariffCoordinator(
-                        hass, resource, tariff_interval
-                    )
-                    # Schedule delayed first refresh instead of immediate call
-                    hass.async_create_task(
-                        _delayed_first_refresh(tariff_coordinators[coordinator_key], 5)
-                    )
-
-                standing_sensor = Standing(
-                    tariff_coordinators[coordinator_key], resource, virtual_entity
-                )
-                entities.append(standing_sensor)
-                _LOGGER.debug(
-                    "Added Standing sensor to list for entity %s", resource.classifier
-                )
-
-                rate_sensor = Rate(
-                    tariff_coordinators[coordinator_key], resource, virtual_entity
-                )
-                entities.append(rate_sensor)
-                _LOGGER.debug(
-                    "Added Rate sensor to list for entity %s", resource.classifier
-                )
+            _process_primary_resource(ctx, virtual_entity, resource)
 
         for resource in resources:
-            if resource.classifier == "gas.consumption.cost":
-                coordinator_key = f"{virtual_entity.id}_{resource.classifier}"
-                if coordinator_key not in daily_coordinators:
-                    daily_coordinators[coordinator_key] = DataCoordinator(
-                        hass, resource, daily_interval
-                    )
-                    # Schedule delayed first refresh instead of immediate call
-                    hass.async_create_task(
-                        _delayed_first_refresh(daily_coordinators[coordinator_key], 5)
-                    )
+            _append_cost_sensor(
+                ctx,
+                virtual_entity,
+                resource,
+                cost_classifier="gas.consumption.cost",
+                meter_classifier="gas.consumption",
+                log_label="Gas",
+            )
+            _append_cost_sensor(
+                ctx,
+                virtual_entity,
+                resource,
+                cost_classifier="electricity.consumption.cost",
+                meter_classifier="electricity.consumption",
+                log_label="Electricity",
+            )
 
-                cost_sensor = Cost(
-                    daily_coordinators[coordinator_key], resource, virtual_entity
-                )
-                cost_sensor.meter = meters["gas.consumption"]
-                entities.append(cost_sensor)
-                _LOGGER.debug("Added Gas Cost sensor to list.")
-            elif resource.classifier == "electricity.consumption.cost":
-                coordinator_key = f"{virtual_entity.id}_{resource.classifier}"
-                if coordinator_key not in daily_coordinators:
-                    daily_coordinators[coordinator_key] = DataCoordinator(
-                        hass, resource, daily_interval
-                    )
-                    # Schedule delayed first refresh instead of immediate call
-                    hass.async_create_task(
-                        _delayed_first_refresh(daily_coordinators[coordinator_key], 5)
-                    )
-
-                cost_sensor = Cost(
-                    daily_coordinators[coordinator_key], resource, virtual_entity
-                )
-                cost_sensor.meter = meters["electricity.consumption"]
-                entities.append(cost_sensor)
-                _LOGGER.debug("Added Electricity Cost sensor to list.")
-
-    _LOGGER.debug("Calling async_add_entities with %s entities", len(entities))
-    async_add_entities(entities)
+    _LOGGER.debug("Calling async_add_entities with %s entities", len(ctx.entities))
+    async_add_entities(ctx.entities)
     _LOGGER.debug("async_add_entities call completed.")
 
     return True
