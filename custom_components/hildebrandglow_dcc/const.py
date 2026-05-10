@@ -4,6 +4,9 @@ DOMAIN = "hildebrandglow_dcc"
 
 # Virtual Entity Classifiers
 ELEC_CONSUMPTION_CLASSIFIER = "electricity.consumption"
+ELEC_EXPORT_CLASSIFIER = "electricity.export"
+ELEC_EXPORT_REACTIVE_CLASSIFIER = "electricity.export.reactive"
+ELEC_IMPORT_REACTIVE_CLASSIFIER = "electricity.import.reactive"
 GAS_CONSUMPTION_CLASSIFIER = "gas.consumption"
 ELEC_COST_CLASSIFIER = "electricity.consumption.cost"
 GAS_COST_CLASSIFIER = "gas.consumption.cost"
