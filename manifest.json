@@ -1,0 +1,16 @@
+{
+  "domain": "hildebrandglow_dcc",
+  "name": "Hildebrand Glow (DCC)",
+  "codeowners": [
+    "@JonandEl"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/jonandel/ha-hildebrandglow-dcc",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/jonandel/ha-hildebrandglow-dcc/issues",
+  "requirements": [
+    "pyglowmarkt==0.5.6"
+  ],
+  "version": "1.6.0"
+}
