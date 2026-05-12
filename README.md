@@ -71,7 +71,12 @@ The usage and cost sensors will still show the previous day's data until shortly
 
 *The standing charge and rate sensors are disabled by default as they are less commonly used. Before enabling them, ensure the data is visible in the Bright app, or the Integration will cause errors.
 
+If you are exporting electricity to the grid, and your Glow account is setup to show them, the integration also exposes:
+- Export (today) and Reactive Export (today)
+
 If the data being shown is wrong, check the Bright app first. If it is also wrong there, you will need to contact your supplier and tell them to fix the data being provided to DCC Other Users, as Bright is one of these.
+
+The integration also exposes a new 'Usage (Cumulative rolling)' sensor - in an attempt to create a 'meter reading' type sensor that can be used in the Energy Dashboard for the overall reading, which hopefully may help those where using the Daily use sensor causes negative and strange values in the Energy Dashboard Integration.
 
 ## Integration Settings
 
