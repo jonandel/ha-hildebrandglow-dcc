@@ -171,8 +171,13 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
             resource.classifier,
             now,
         )
+        # Requesting P1D (whole-day) buckets for a partial-day range (midnight to
+        # now) can return full-day buckets that don't align with t_from/t_to,
+        # so summing "the first one or two rows" ends up double-counting whole
+        # days instead of today-so-far. Requesting half-hourly (PT30M) buckets
+        # and summing all of them gives the correct partial-day total.
         readings = await hass.async_add_executor_job(
-            resource.get_readings, t_from, t_to, "P1D", "sum", utc_offset
+            resource.get_readings, t_from, t_to, "PT30M", "sum", utc_offset
         )
         _LOGGER.debug("Successfully got daily usage for resource id %s", resource.id)
         _LOGGER.debug(
@@ -180,23 +185,15 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
         )
         if not readings:
             _LOGGER.debug("nothing returned")
-        else:
-            v = readings[0][1].value
-            _LOGGER.debug(
-                "%s First reading %s at %s",
-                resource.classifier,
-                readings[0][0],
-                readings[0][1].value,
-            )
-            if len(readings) > 1:
-                v += readings[1][1].value
-                _LOGGER.debug(
-                    "%s Second reading %s at %s",
-                    resource.classifier,
-                    readings[1][0],
-                    readings[1][1].value,
-                )
-            return v
+            return None
+        v = 0.0
+        for reading in readings:
+            if reading[1] is not None and reading[1].value is not None:
+                v += reading[1].value
+        _LOGGER.debug(
+            "%s summed %d readings = %s", resource.classifier, len(readings), v
+        )
+        return v
     except HTTPError as ex:
         _LOGGER.error(
             "HTTP Error fetching daily data: %s, Status Code: %s",
