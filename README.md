@@ -53,7 +53,7 @@ Once added, the integration will attempt to setup by taking your BRIGHT credenti
 
 ## Upgrading
 
-If upgrading from a an older version of this integration, e.g when pushed from HACS, you may need to delete the integration, and then re add it to update the configurations (which get cached).
+If upgrading from an older version of this integration, e.g when pushed from HACS, you may need to delete the integration, and then re add it to update the configurations (which get cached).
 To do this, let HACS download the new version, and then restart Home Assistant (as HACS does for you).  Then in Settings/Integrations, open this Integration, and if there are errors reported, select 'Delete' from the three dots next to the 'Hildebrand Glow (DCC)' Hub. Then do a restart of Home Assistant.  Then go back into Integrations, and 'Add Integration' and add this integration again.  That will prompt HA to re-setup everything.
 
 If you are upgrading from a version before 1.4, or indeed from the original Integration Repo, then you will note the sensor names will be changed - this is due to the sensors now have the device name added, for those users that have more than one 'installation'.  Where the sensor names change, your old sensors will remain (but eventually be orphaned by Home Assistant onec they get 'stale').  You may have to investigate and adjust any historic use for example, if you wish to keep long term stats.
