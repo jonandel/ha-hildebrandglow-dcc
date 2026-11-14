@@ -279,6 +279,11 @@ async def async_fetch_hourly(
 # --- IMPORTER ---
 
 
+def _is_cost(source: StatisticsSource) -> bool:
+    """Return whether a source is a cost resource."""
+    return source.resource.classifier.endswith(".cost")
+
+
 @dataclass
 class StatisticsSource:
     """A Glowmarkt resource and the statistic it is imported into."""
@@ -307,6 +312,8 @@ class HourlyStatisticsImporter:
         self.lookback = timedelta(hours=lookback_hours)
         self.backfill_days = backfill_days
         self.sources: list[StatisticsSource] = []
+        # Last hour with usage data, by usage classifier, from this session.
+        self._usage_until: dict[str, datetime] = {}
         self._lock = asyncio.Lock()
 
     def add_resource(self, resource, name: str) -> None:
@@ -329,7 +336,8 @@ class HourlyStatisticsImporter:
             _LOGGER.debug("Previous hourly statistics import still running")
             return
         async with self._lock:
-            for source in self.sources:
+            # Usage first, so that cost can stop at the last hour of usage data.
+            for source in sorted(self.sources, key=_is_cost):
                 try:
                     await self.async_import(source, now)
                 except GlowmarktApiError as ex:
@@ -364,8 +372,15 @@ class HourlyStatisticsImporter:
         if window_start == backfill_start:
             source.backfilled_from = backfill_start
 
+        rows_end = end
+        if _is_cost(source) and (limit := await self._async_cost_limit(source)):
+            rows_end = min(end, limit + HOUR)
         scale = 0.01 if units == "pence" else 1.0
-        rows = build_hourly_statistics(readings, window_start, end, start_sum, scale)
+        rows = build_hourly_statistics(
+            readings, window_start, rows_end, start_sum, scale
+        )
+        if rows and not _is_cost(source):
+            self._usage_until[source.resource.classifier] = rows[-1]["start"]
         if not rows:
             _LOGGER.debug(
                 "No readings yet for %s between %s and %s",
@@ -410,13 +425,32 @@ class HourlyStatisticsImporter:
             return backfill_start, backfill_start
 
         window_start = floor_hour(now) - self.lookback
+        if last := await self._async_last_hour(stat_id):
+            window_start = min(window_start, last + HOUR)
+        return window_start, backfill_start
+
+    async def _async_cost_limit(self, source: StatisticsSource) -> datetime | None:
+        """Return the last hour a cost statistic may be written to, if limited.
+
+        Glowmarkt reports cost as 0, not null, for hours whose usage has not
+        arrived yet. Cost rows therefore stop at the last hour of usage data,
+        but never short of a row already stored, so running sums stay
+        consistent. Without usage data from this session there is no limit.
+        """
+        usage = source.resource.classifier.removesuffix(".cost")
+        if (usage_until := self._usage_until.get(usage)) is None:
+            return None
+        stored_until = await self._async_last_hour(source.statistic_id)
+        return max(usage_until, stored_until) if stored_until else usage_until
+
+    async def _async_last_hour(self, stat_id: str) -> datetime | None:
+        """Return the start of the newest stored row, if any."""
         last = await get_instance(self.hass).async_add_executor_job(
             get_last_statistics, self.hass, 1, stat_id, False, {"sum"}
         )
         if rows := last.get(stat_id):
-            next_hour = dt_util.utc_from_timestamp(rows[0]["start"]) + HOUR
-            window_start = min(window_start, next_hour)
-        return window_start, backfill_start
+            return dt_util.utc_from_timestamp(rows[0]["start"])
+        return None
 
     async def _async_rows(
         self, stat_id: str, start: datetime, end: datetime

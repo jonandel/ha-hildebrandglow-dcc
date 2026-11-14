@@ -275,3 +275,84 @@ async def test_cost_is_written_in_pounds(london):
     rows = await stored(hass, COST_STAT_ID)
     assert rows[datetime(2026, 11, 11, tzinfo=UTC)][0] == pytest.approx(0.25)
     assert rows[max(rows)][1] == pytest.approx(6.0)
+
+
+COST_RESOURCE_ID = "66666666-7777-8888-9999-000000000000"
+SPLIT_COST_STAT_ID = (
+    "hildebrandglow_dcc:electricity_consumption_cost_"
+    f"{COST_RESOURCE_ID.replace('-', '_')}"
+)
+
+
+def usage_and_cost(hass, server_by_resource):
+    """Importer with a usage and a cost resource, cost registered first."""
+    importer = HourlyStatisticsImporter(hass, object(), 72, 3)
+    importer.add_resource(
+        SimpleNamespace(id=COST_RESOURCE_ID, classifier="electricity.consumption.cost"),
+        "Smart meter cost",
+    )
+    importer.add_resource(
+        SimpleNamespace(id=RESOURCE_ID, classifier="electricity.consumption"),
+        "Smart meter usage",
+    )
+
+    async def fetch(hass, client, resource_id, start, end):
+        return await server_by_resource[resource_id].fetch(
+            hass, client, resource_id, start, end
+        )
+
+    return importer, fetch
+
+
+async def test_cost_stops_at_last_hour_of_usage(london):
+    """Cost hours whose usage has not arrived are left out, not written as 0."""
+    hass = london
+    usage, cost = FakeGlowmarkt(), FakeGlowmarkt(units="pence")
+    start = datetime(2026, 11, 11, tzinfo=UTC)
+    last_usage = datetime(2026, 11, 14, 17, tzinfo=UTC)
+    fill(usage, start, last_usage + H)
+    fill(cost, start, last_usage + H, 25.0)
+    fill(cost, last_usage + H, NOW, 0.0)  # Glowmarkt sends 0, not null
+    importer, fetch = usage_and_cost(hass, {RESOURCE_ID: usage, COST_RESOURCE_ID: cost})
+
+    with patch.object(hourly_statistics, "async_fetch_hourly", fetch):
+        await importer.async_run(NOW)
+    assert max(await stored(hass, SPLIT_COST_STAT_ID)) == last_usage
+
+    usage.data[last_usage + H] = 1.0
+    cost.data[last_usage + H] = 25.0
+    with patch.object(hourly_statistics, "async_fetch_hourly", fetch):
+        await importer.async_run(NOW + H)
+    rows = await stored(hass, SPLIT_COST_STAT_ID)
+    assert max(rows) == last_usage + H
+    assert rows[max(rows)][1] == pytest.approx(0.25 * len(rows))
+
+
+async def test_cost_rows_already_past_usage_keep_sums_consistent(london):
+    """Zero cost rows written before the limit existed are rewritten, not left stale."""
+    hass = london
+    usage, cost = FakeGlowmarkt(), FakeGlowmarkt(units="pence")
+    start = datetime(2026, 11, 11, tzinfo=UTC)
+    last_usage = datetime(2026, 11, 14, 17, tzinfo=UTC)
+    fill(usage, start, last_usage + H)
+    fill(cost, start, last_usage + H, 25.0)
+    fill(cost, last_usage + H, NOW, 0.0)
+    # Cost on its own has no usage to stop at, so it runs to the last hour.
+    cost_only = HourlyStatisticsImporter(hass, object(), 72, 3)
+    cost_only.add_resource(
+        SimpleNamespace(id=COST_RESOURCE_ID, classifier="electricity.consumption.cost"),
+        "Smart meter cost",
+    )
+    with patch.object(hourly_statistics, "async_fetch_hourly", cost.fetch):
+        await cost_only.async_run(NOW)
+    assert max(await stored(hass, SPLIT_COST_STAT_ID)) == NOW.replace(minute=0) - H
+
+    usage.data[last_usage + H] = 1.0
+    cost.data[last_usage + H] = 25.0
+    importer, fetch = usage_and_cost(hass, {RESOURCE_ID: usage, COST_RESOURCE_ID: cost})
+    with patch.object(hourly_statistics, "async_fetch_hourly", fetch):
+        await importer.async_run(NOW + H)
+    rows = await stored(hass, SPLIT_COST_STAT_ID)
+    sums = [rows[hour][1] for hour in sorted(rows)]
+    assert sums == sorted(sums)  # never decreases
+    assert sums[-1] == pytest.approx(0.25 * ((last_usage + H - start) // H + 1))
