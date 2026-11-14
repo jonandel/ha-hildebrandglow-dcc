@@ -21,6 +21,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
@@ -28,9 +29,24 @@ from homeassistant.helpers.update_coordinator import (
 )
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL, DOMAIN
+from .const import (
+    CONF_BACKFILL_DAYS,
+    CONF_DAILY_INTERVAL,
+    CONF_LOOKBACK_HOURS,
+    CONF_STATISTICS_INTERVAL,
+    CONF_TARIFF_INTERVAL,
+    DEFAULT_BACKFILL_DAYS,
+    DEFAULT_LOOKBACK_HOURS,
+    DEFAULT_STATISTICS_INTERVAL,
+    DOMAIN,
+)
+from .hourly_statistics import STATISTICS_CLASSIFIERS, HourlyStatisticsImporter
 
 _LOGGER = logging.getLogger(__name__)
+
+# Delay before the first hourly statistics import, so it doesn't run at the same
+# time as the first daily and tariff refreshes.
+STATISTICS_FIRST_RUN_DELAY = 60
 
 
 @dataclass
@@ -463,6 +479,34 @@ class Rate(CoordinatorEntity, SensorEntity):
         )
 
 
+def _schedule_statistics_import(
+    hass: HomeAssistant, entry: ConfigEntry, importer: HourlyStatisticsImporter
+) -> None:
+    """Run the hourly statistics import shortly after setup, then periodically."""
+    interval = hass.data[DOMAIN][entry.entry_id].get(
+        CONF_STATISTICS_INTERVAL, DEFAULT_STATISTICS_INTERVAL
+    )
+
+    @callback
+    def _start_import(_now: datetime) -> None:
+        # Background tasks owned by the entry are cancelled when it unloads.
+        entry.async_create_background_task(
+            hass, importer.async_run(), f"{DOMAIN} hourly statistics import"
+        )
+
+    entry.async_on_unload(
+        async_call_later(hass, STATISTICS_FIRST_RUN_DELAY, _start_import)
+    )
+    entry.async_on_unload(
+        async_track_time_interval(hass, _start_import, timedelta(minutes=interval))
+    )
+    _LOGGER.debug(
+        "Hourly statistics import scheduled every %s minutes for %s statistics",
+        interval,
+        len(importer.sources),
+    )
+
+
 # --- ASYNC SETUP ENTRY FUNCTION ---
 
 
@@ -480,6 +524,16 @@ async def async_setup_entry(
     # Get the daily and tariff intervals from the stored data, with a fallback default.
     daily_interval = hass.data[DOMAIN][entry.entry_id].get(CONF_DAILY_INTERVAL, 15)
     tariff_interval = hass.data[DOMAIN][entry.entry_id].get(CONF_TARIFF_INTERVAL, 60)
+    importer = HourlyStatisticsImporter(
+        hass,
+        glowmarkt,
+        lookback_hours=hass.data[DOMAIN][entry.entry_id].get(
+            CONF_LOOKBACK_HOURS, DEFAULT_LOOKBACK_HOURS
+        ),
+        backfill_days=hass.data[DOMAIN][entry.entry_id].get(
+            CONF_BACKFILL_DAYS, DEFAULT_BACKFILL_DAYS
+        ),
+    )
 
     virtual_entities: dict = {}
     try:
@@ -534,6 +588,11 @@ async def async_setup_entry(
             _LOGGER.debug(
                 "Processing resource with classifier: %s", resource.classifier
             )
+            if resource.classifier in STATISTICS_CLASSIFIERS:
+                kind = "cost" if resource.classifier.endswith(".cost") else "usage"
+                importer.add_resource(
+                    resource, f"{device_name(resource, virtual_entity)} {kind}"
+                )
             if resource.classifier in ["electricity.consumption", "gas.consumption"]:
                 coordinator_key = f"{virtual_entity.id}_{resource.classifier}"
                 if coordinator_key not in daily_coordinators:
@@ -618,5 +677,8 @@ async def async_setup_entry(
     _LOGGER.debug("Calling async_add_entities with %s entities", len(entities))
     async_add_entities(entities)
     _LOGGER.debug("async_add_entities call completed.")
+
+    if importer.sources:
+        _schedule_statistics_import(hass, entry, importer)
 
     return True

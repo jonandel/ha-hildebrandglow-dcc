@@ -5,6 +5,9 @@
     "@JonandEl"
   ],
   "config_flow": true,
+  "dependencies": [
+    "recorder"
+  ],
   "documentation": "https://github.com/jonandel/ha-hildebrandglow-dcc",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
