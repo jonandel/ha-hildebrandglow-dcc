@@ -5,7 +5,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 import asyncio
 from collections.abc import Callable
-from datetime import datetime, time, timedelta
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 import logging
 
 import requests
@@ -30,6 +31,15 @@ from homeassistant.util import dt as dt_util
 from .const import CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass
+class DailyTotal:
+    """Today's usage or cost so far, and the local midnight it is counted from."""
+
+    value: float
+    start: datetime
+
 
 # --- COORDINATOR CLASSES ---
 
@@ -137,12 +147,10 @@ def device_name(resource, virtual_entity) -> str:
     return name
 
 
-async def daily_data(hass: HomeAssistant, resource) -> float:
-    """Get Summ for the day from the API."""
+async def daily_data(hass: HomeAssistant, resource) -> DailyTotal | None:
+    """Get the total for today (local time) so far from the API."""
     _LOGGER.debug("Fetching today's data")
-    now = dt_util.utcnow()
-    utc_offset = -int(dt_util.now().utcoffset().total_seconds() / 60)
-    _LOGGER.debug("UTC offset is: %s", utc_offset)
+    now = dt_util.now()
 
     try:
         await hass.async_add_executor_job(resource.catchup)
@@ -158,9 +166,10 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
         _LOGGER.error("Cannot connect: %s", ex)
     except Exception as ex:  # pylint: disable=broad-except
         _LOGGER.exception("Unexpected exception: %s. Please open an issue", ex)
-    t_from = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(
-        minutes=utc_offset
-    )
+    # pyglowmarkt converts aware datetimes to UTC and always queries with offset=0.
+    # Local midnight is used directly: deriving it from the UTC date gave
+    # yesterday's midnight between 00:00 and 01:00 during BST.
+    t_from = dt_util.start_of_local_day(now)
     t_to = now.replace(second=0, microsecond=0)
 
     try:
@@ -171,8 +180,12 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
             resource.classifier,
             now,
         )
+        # Sum half-hourly readings rather than asking for a P1D total: P1D cost
+        # buckets include the daily standing charge once for every UTC day the
+        # range touches, so during BST "today" included two standing charges.
+        # Approach from PR #85 by jameshoweee.
         readings = await hass.async_add_executor_job(
-            resource.get_readings, t_from, t_to, "P1D", "sum", utc_offset
+            resource.get_readings, t_from, t_to, "PT30M", "sum"
         )
         _LOGGER.debug("Successfully got daily usage for resource id %s", resource.id)
         _LOGGER.debug(
@@ -180,23 +193,16 @@ async def daily_data(hass: HomeAssistant, resource) -> float:
         )
         if not readings:
             _LOGGER.debug("nothing returned")
-        else:
-            v = readings[0][1].value
-            _LOGGER.debug(
-                "%s First reading %s at %s",
-                resource.classifier,
-                readings[0][0],
-                readings[0][1].value,
-            )
-            if len(readings) > 1:
-                v += readings[1][1].value
-                _LOGGER.debug(
-                    "%s Second reading %s at %s",
-                    resource.classifier,
-                    readings[1][0],
-                    readings[1][1].value,
-                )
-            return v
+            return None
+        total = sum(
+            reading[1].value
+            for reading in readings
+            if reading[1] is not None and reading[1].value is not None
+        )
+        _LOGGER.debug(
+            "%s summed %d readings = %s", resource.classifier, len(readings), total
+        )
+        return DailyTotal(value=total, start=t_from)
     except HTTPError as ex:
         _LOGGER.error(
             "HTTP Error fetching daily data: %s, Status Code: %s",
@@ -337,9 +343,9 @@ class Usage(GlowDCCSensor):
         return None
 
     @callback
-    def _update_native_value(self, data: float) -> None:
+    def _update_native_value(self, data: DailyTotal) -> None:
         """Set the native value for usage sensor from coordinator data."""
-        self._attr_native_value = round(data, 2)
+        self._attr_native_value = round(data.value, 2)
 
 
 class Cost(GlowDCCSensor):
@@ -361,9 +367,15 @@ class Cost(GlowDCCSensor):
         _LOGGER.debug("Created Cost sensor with unique_id: %s", self._attr_unique_id)
 
     @callback
-    def _update_native_value(self, data: float) -> None:
-        """Set the native value for cost sensor from coordinator data."""
-        self._attr_native_value = round(data / 100, 2)
+    def _update_native_value(self, data: DailyTotal) -> None:
+        """Set the native value for cost sensor from coordinator data.
+
+        last_reset marks the local midnight the total is counted from, so the
+        recorder starts a new cycle at midnight instead of booking the drop
+        back to zero as a negative cost.
+        """
+        self._attr_native_value = round(data.value / 100, 2)
+        self._attr_last_reset = data.start
 
 
 class Standing(CoordinatorEntity, SensorEntity):
