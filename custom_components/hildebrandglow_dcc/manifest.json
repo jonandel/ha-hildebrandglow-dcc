@@ -5,6 +5,9 @@
     "@JonandEl"
   ],
   "config_flow": true,
+  "dependencies": [
+    "recorder"
+  ],
   "documentation": "https://github.com/jonandel/ha-hildebrandglow-dcc",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
@@ -12,5 +15,5 @@
   "requirements": [
     "pyglowmarkt==0.5.6"
   ],
-  "version": "1.4.1"
+  "version": "1.4.3"
 }

@@ -63,11 +63,13 @@ If you are upgrading from a version before 1.4, or indeed from the original Inte
 Once you've authenticated, the integration will automatically set up the following sensors for each of the smart meters on your account:
 
 - Usage (Today) - Consumption today (kWh)
-- Cost (Today) - Total cost of today's consumption (GBP)
+- Cost (Today) - Cost of today's consumption (GBP), excluding the standing charge
 - Standing Charge* - Current daily standing charge (GBP)
 - Rate* - Current tariff (GBP/kWh)
 
-The usage and cost sensors will still show the previous day's data until shortly after 01:00 to ensure that all of the previous day's data is collected.
+The usage and cost sensors count from local midnight. They only show what has reached the DCC so far, which is often several hours behind; use the [hourly statistics](#hourly-statistics-energy-dashboard) for accurate history.
+
+From 1.4.2, Cost (Today) no longer includes the standing charge. Previously it was included once a day in winter and twice during British Summer Time. Use the Standing Charge sensor if you need it.
 
 *The standing charge and rate sensors are disabled by default as they are less commonly used. Before enabling them, ensure the data is visible in the Bright app, or the Integration will cause errors.
 
@@ -78,17 +80,40 @@ If the data being shown is wrong, check the Bright app first. If it is also wron
 Once the integration is running, there is an options (settings 'cog') next to the 'Hildebrand Glow (DCC)' Hub - this lets you change the frequency at which the integration pulls the data.  Values less than five minutes are not allowed.
 - Daily_refresh: This is the usage data from your meter (ie readings) - is updated at most every 30 mins on the DCC
 - Tarrif_refresh: This is the daily standing charge, and tarrif data - Unless you are on a complex tarrif, this will be mainly static for days.
+- Hourly statistics refresh (default 60 minutes, minimum 15): how often the hourly statistics are updated.
+- Hourly statistics lookback (default 72 hours, 24 to 240): how far back each refresh re-reads. Readings that reach the DCC later than this are not picked up.
+- Hourly statistics backfill (default 30 days, up to 400): how much history to import the first time. If you raise it later, the extra days are imported on the next refresh. The DCC keeps about 13 months.
   
 Please note: Do not set these parameters too frequently, as the data is only updated on the DCC (at very best) every 30 minutes or so.  If you set the 'refresh intervals' too high, you will overload the API, but will not obtain higher refresh rates in your Home Assistant.
 
-## Energy Management
+## Hourly statistics (Energy dashboard)
 
-The sensors created were originally designed to integrate directly into Home Assistant's [Home Energy Management](https://www.home-assistant.io/docs/energy/).  However, with HA since (roughly 2024), the energy dashboard does not handle the daily resetting of the sensors.  
-It is NOT recommended you use the daily usage and cost sensors in the Energy integration, and consider using the Utility Meter Integration (built into HA), and define you own total usage and Cost sensors.  A later release of this integration will update on suggestions on what and how to do this - but it is currently believed to be NOT something this integration can resolve directly.
+Smart meter readings reach the DCC, and so Glow, hours after they were taken (often 4 or more hours, sometimes a whole day). A sensor that shows "today so far" can't record that correctly: data that arrives after midnight is lost, and data that arrives late is booked to the hour it arrived rather than the hour you used it.
 
-Be aware also that due to the lower refresh rate of this Integration, you will need to wait until the sensors have data - so wait an hour or two.
+So the integration also writes **hourly long-term statistics** straight into Home Assistant's recorder, back-dated to the hour each reading belongs to. Every refresh re-reads the last 72 hours (configurable) and rewrites them, so hours that were missing are filled in once their data arrives. On first setup it backfills 30 days (configurable).
+
+One statistic is created per meter resource:
+
+| Statistic | Unit |
+| --- | --- |
+| `hildebrandglow_dcc:electricity_consumption_<resource id>` | kWh |
+| `hildebrandglow_dcc:electricity_consumption_cost_<resource id>` | GBP |
+| `hildebrandglow_dcc:gas_consumption_<resource id>` | kWh |
+| `hildebrandglow_dcc:gas_consumption_cost_<resource id>` | GBP |
+
+They are named after the meter, e.g. "Smart electricity meter usage" and "Smart electricity meter cost". They are statistics, not entities, so they don't appear in the entity list. You can find them under Developer tools → Statistics. Cost excludes the standing charge.
+
+### Using them in the Energy dashboard
 
 [![Open your Home Assistant instance and show your Energy configuration panel.](https://my.home-assistant.io/badges/config_energy.svg)](https://my.home-assistant.io/redirect/config_energy/)
+
+1. Under **Electricity grid → Grid consumption**, add *Smart electricity meter usage*. For the cost, choose *Use an entity tracking the total costs* and pick *Smart electricity meter cost*.
+2. Under **Gas consumption**, add *Smart gas meter usage* with *Smart gas meter cost*.
+3. Remove the *Usage (today)* and *Cost (today)* sensors from the Energy dashboard if they're there, or energy will be counted twice.
+
+The newest hours appear a few hours late, as the data reaches the DCC. Hours without data yet are left blank rather than shown as zero.
+
+The Usage (today) and Cost (today) sensors are still there for display. They are not recommended for the Energy dashboard.
 
 ## Debugging
 
@@ -115,7 +140,15 @@ python -m venv dev-venv
 You can then install the dependencies that will allow you to develop:
 `pip3 install -r requirements-dev.txt`
 
-This will install `black`, `homeassistant`, `isort`, `pyglowmarkt` and `pylint`.
+This will install `black`, `homeassistant`, `isort`, `pyglowmarkt`, `pylint` and `pytest-homeassistant-custom-component`.
+
+### Tests
+
+```bash
+pytest
+```
+
+The tests cover building hourly statistics (late data, gaps, clock changes, pence to pounds), the importer against a real recorder (backfill, restarts, failed polls), Glowmarkt retries and back-off, and setting up the integration with a fake client.
 
 ### Code Style
 

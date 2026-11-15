@@ -12,7 +12,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 
-from .const import CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL, DOMAIN
+from .const import DEFAULT_OPTIONS, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -49,15 +49,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.debug("Successful authentication. API object created.")
 
     # Set API object and config options, using options flow values if they exist
-    hass.data[DOMAIN][entry.entry_id] = {
-        "client": glowmarkt,
-        CONF_DAILY_INTERVAL: entry.options.get(
-            CONF_DAILY_INTERVAL, entry.data.get(CONF_DAILY_INTERVAL, 15)
-        ),
-        CONF_TARIFF_INTERVAL: entry.options.get(
-            CONF_TARIFF_INTERVAL, entry.data.get(CONF_TARIFF_INTERVAL, 60)
-        ),
-    }
+    hass.data[DOMAIN][entry.entry_id] = {"client": glowmarkt}
+    for key, default in DEFAULT_OPTIONS.items():
+        value = entry.options.get(key)
+        if value is None:
+            value = entry.data.get(key, default)
+        hass.data[DOMAIN][entry.entry_id][key] = int(value)
     _LOGGER.debug(
         "API object and config stored in hass.data. Forwarding setup to platforms..."
     )

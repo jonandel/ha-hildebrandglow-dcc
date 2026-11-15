@@ -13,7 +13,20 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 
-from .const import CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL, DOMAIN
+from .const import (
+    CONF_BACKFILL_DAYS,
+    CONF_DAILY_INTERVAL,
+    CONF_LOOKBACK_HOURS,
+    CONF_STATISTICS_INTERVAL,
+    CONF_TARIFF_INTERVAL,
+    DEFAULT_BACKFILL_DAYS,
+    DEFAULT_LOOKBACK_HOURS,
+    DEFAULT_OPTIONS,
+    DEFAULT_STATISTICS_INTERVAL,
+    DOMAIN,
+    MAX_BACKFILL_DAYS,
+    MAX_LOOKBACK_HOURS,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,6 +44,15 @@ OPTIONS_SCHEMA = vol.Schema(
         ),
         vol.Optional(CONF_TARIFF_INTERVAL): vol.All(
             vol.Coerce(int), vol.Range(min=1)
+        ),
+        vol.Optional(
+            CONF_STATISTICS_INTERVAL, default=DEFAULT_STATISTICS_INTERVAL
+        ): vol.All(vol.Coerce(int), vol.Range(min=15, max=1440)),
+        vol.Optional(CONF_LOOKBACK_HOURS, default=DEFAULT_LOOKBACK_HOURS): vol.All(
+            vol.Coerce(int), vol.Range(min=24, max=MAX_LOOKBACK_HOURS)
+        ),
+        vol.Optional(CONF_BACKFILL_DAYS, default=DEFAULT_BACKFILL_DAYS): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=MAX_BACKFILL_DAYS)
         ),
     }
 )
@@ -86,7 +108,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.exception("Unexpected exception: %s", ex)
             errors["base"] = "unknown"
         else:
-            return self.async_create_entry(title=info["title"], data=user_input, options={CONF_DAILY_INTERVAL: 15, CONF_TARIFF_INTERVAL: 60})
+            return self.async_create_entry(
+                title=info["title"],
+                data=user_input,
+                options=dict(DEFAULT_OPTIONS),
+            )
 
         return self.async_show_form(
             step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors

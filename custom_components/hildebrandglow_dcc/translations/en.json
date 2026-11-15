@@ -18,5 +18,24 @@
                 "title": "Hildebrand Glow (DCC) API access"
             }
         }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Hildebrand Glow (DCC) options",
+                "data": {
+                    "daily_interval": "Daily usage and cost refresh (minutes)",
+                    "tariff_interval": "Tariff refresh (minutes)",
+                    "statistics_interval": "Hourly statistics refresh (minutes)",
+                    "lookback_hours": "Hourly statistics lookback (hours)",
+                    "backfill_days": "Hourly statistics backfill (days)"
+                },
+                "data_description": {
+                    "statistics_interval": "How often to re-read recent hourly data for the long-term statistics used by the Energy dashboard.",
+                    "lookback_hours": "How far back each refresh re-reads, so readings that reach the DCC late are corrected. Data arriving later than this is not picked up.",
+                    "backfill_days": "How much history to import on first setup. Raising it later imports the extra days on the next refresh. The DCC keeps about 13 months."
+                }
+            }
+        }
     }
 }
