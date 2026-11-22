@@ -362,7 +362,15 @@ class Cost(GlowDCCSensor):
 
     @callback
     def _update_native_value(self, data: float) -> None:
-        """Set the native value for cost sensor from coordinator data."""
+        """Set the native value for cost sensor from coordinator data.
+
+        Set last_reset to the start of the local day in the same state write as
+        the first value of each new day, so HA's statistics treat midnight as a
+        new cycle instead of recording the drop as a negative cost (#71).
+        """
+        start_of_day = dt_util.start_of_local_day()
+        if self._attr_last_reset != start_of_day:
+            self._attr_last_reset = start_of_day
         self._attr_native_value = round(data / 100, 2)
 
 
