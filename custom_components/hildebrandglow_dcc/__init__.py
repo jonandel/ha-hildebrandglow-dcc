@@ -9,9 +9,11 @@ import requests
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import entity_registry as er
 
+from .config_flow import ConfigFlow
 from .const import CONF_DAILY_INTERVAL, CONF_TARIFF_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -66,6 +68,54 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     _LOGGER.debug("Finished async_setup_entry successfully.")
+    return True
+
+
+def _current_unique_id(entity: er.RegistryEntry) -> str | None:
+    """Return the unique ID this integration uses for a HandyHat-named entity."""
+    old = entity.unique_id
+    if old.endswith("-rate"):
+        return f"{old.removesuffix('-rate')}_rate"
+    if old.endswith("-tariff"):
+        return f"{old.removesuffix('-tariff')}_standing_charge"
+    if "_" in old:
+        return None
+    if entity.original_device_class == "monetary":
+        return f"{old}_cost_today"
+    if entity.original_device_class == "energy":
+        return f"{old}_usage_today"
+    return None
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Bring entries from older versions, including HandyHat's version 1, up to date.
+
+    HandyHat named sensors by bare resource ID ("<id>", "<id>-rate", "<id>-tariff").
+    Moving them to this integration's IDs keeps their entity IDs, history and
+    Energy dashboard settings.
+    """
+    if entry.version >= ConfigFlow.VERSION:
+        return True
+    _LOGGER.debug("Migrating config entry from version %s", entry.version)
+    registry = er.async_get(hass)
+
+    @callback
+    def _migrate(entity: er.RegistryEntry) -> dict[str, str] | None:
+        new = _current_unique_id(entity)
+        if new is None:
+            return None
+        if registry.async_get_entity_id(entity.domain, DOMAIN, new):
+            _LOGGER.warning(
+                "Not migrating %s: unique ID %s is already in use",
+                entity.entity_id,
+                new,
+            )
+            return None
+        return {"new_unique_id": new}
+
+    await er.async_migrate_entries(hass, entry.entry_id, _migrate)
+    hass.config_entries.async_update_entry(entry, version=ConfigFlow.VERSION)
+    _LOGGER.info("Migrated config entry to version %s", ConfigFlow.VERSION)
     return True
 
 
