@@ -102,30 +102,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         internally handles providing the config_entry to it.
         """
         return OptionsFlowHandler()
-    
-    async def async_migrate_entry(self, config_entry: config_entries.ConfigEntry):
-        """Migrate old entry."""
-        _LOGGER.debug("Migrating from version %s", config_entry.version)
-
-        # In this simple case, we are just bumping the version and the data structure has not changed - with the exception of version 1.1.5 and 1.1.6 preview, which 
-        # introduced the polling frequency values - which were then remove, and added as options in the Options workflow handler.... 
-        # However v1.3.0 bumped the version config_flow number to 6, so we need to maintain that number or higher going forwards.
-        # Home Assistant requires this method to exist to prevent a migration error when the version number changes.
-        
-        # When moving from a new version to an old one, the existing entry's data is
-        # incompatible. To handle a downgrade, you would need to add logic here to
-        # transform the new data back to the old format.
-        # Example:
-        # if config_entry.version == 2:
-        #     new_data = {**config_entry.data}
-        #     # Add new logic here to transform the data.
-        #     config_entry.version = 1
-        #     self.hass.config_entries.async_update_entry(config_entry, data=new_data)
-        
-        # For a simple version bump with no data change, just return True.
-        
-        _LOGGER.info("Migration successful for config entry version %s", config_entry.version)
-        return True
 
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
